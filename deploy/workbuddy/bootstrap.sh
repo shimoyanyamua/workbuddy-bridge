@@ -42,6 +42,8 @@ PERSIST="${WORKBUDDY_PERSIST:-/home/hatch}"
 OPS="$PERSIST/bridge-ops"
 RELS="$PERSIST/bridge-releases"
 DATA="${WORKBUDDY_DATA:-$PERSIST/bridge-srv}"
+# PORT / SVC_USER 与 scripts/server/install.sh（通用安装器）保持一致，改一处要同步另一处。
+# DATA 必须在 $PERSIST（/home/hatch）底下：平台重启后只有它保留；那边默认的 /var/lib/bridge 在这台 VM 上重启即丢。
 PORT=8787
 SVC_USER=bridge
 PROXY="${WORKBUDDY_PROXY:-http://hatch-egress-proxy:3128}"

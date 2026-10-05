@@ -21,7 +21,7 @@ The server listens on 127.0.0.1 only and is exposed through a Cloudflare tunnel 
 
 ## Installing on a regular Linux server
 
-On Debian / Ubuntu with systemd:
+On Debian / Ubuntu **with systemd**:
 
 ```bash
 git clone https://github.com/shimoyanyamua/workbuddy-bridge.git /opt/workbuddy-bridge && cd /opt/workbuddy-bridge
@@ -31,6 +31,40 @@ sudo bash scripts/server/install.sh --agents claude,dimensio
 Run `install.sh --help` to see all options. The service listens on 127.0.0.1 only; for outside access, set up your own tunnel or reverse proxy (`--tunnel-token` can start a Cloudflare named tunnel for you). To update: `sudo bash scripts/server/update.sh`.
 
 Once it's up, open the service address in a browser and sign in with the admin token the installer printed. Then go to **Settings → Connection → Admin console → Claude accounts** and add your Claude subscription token (see below).
+
+**Which install path is mine?** Two installers ship with this project, and they are not interchangeable:
+
+| Your machine | Use |
+|---|---|
+| A specific hosting platform's agent VM (the one whose `/etc/hosts` contains `hatch-egress-proxy`; the platform provides a hook/automation system) | `deploy/workbuddy/` — send the one-message prompt below; its agent runs `bootstrap.sh` |
+| Any other Debian/Ubuntu Linux **with systemd** (VPS, bare metal, your own container host) | `scripts/server/install.sh` (the command above) |
+| Debian/Ubuntu **without systemd** (plain container, chroot) | `scripts/server/run-standalone.sh` — see [Running without systemd](#running-without-systemd) |
+
+If you run `bootstrap.sh` anywhere outside its platform it exits immediately with a message telling you so — that's by design; switch to `install.sh`. The boundary is also stated at the top of `WORKBUDDY.md`.
+
+**Verify the download.** `install.sh` builds from a clone, so this applies when you install from a release tarball: check `workbuddy-bridge.tgz` against its `.sha256` file. If that small file fails to download (some networks choke on release asset redirects), ask the GitHub API for the digest the platform recorded at upload time and compare:
+
+```bash
+curl -fsSL https://api.github.com/repos/shimoyanyamua/workbuddy-bridge/releases/latest | jq -r '.assets[] | select(.name=="workbuddy-bridge.tgz") | .digest'   # → sha256:…
+sha256sum workbuddy-bridge.tgz
+```
+
+## Running without systemd
+
+Containers and chroot machines often have no systemd. The server itself doesn't need it: `scripts/server/run-standalone.sh` starts it in the foreground with the exact same environment the systemd unit would set (data dirs, dimensio paths, port/host), so nothing is silently missing:
+
+```bash
+sudo bash scripts/server/run-standalone.sh                       # defaults: /var/lib/bridge, 127.0.0.1:8787
+sudo bash scripts/server/run-standalone.sh --data /srv/bridge --port 8787 --host 127.0.0.1
+```
+
+To keep it running across crashes (the equivalent of the unit's `Restart=always`), wrap it in a keepalive loop — the server comes back within seconds of dying:
+
+```bash
+while true; do sudo bash scripts/server/run-standalone.sh; sleep 3; done
+```
+
+Run that under `nohup`/`setsid` or your supervisor of choice, add a `/etc/bridge/bridge.env` file for `CLAUDE_CODE_OAUTH_TOKEN` and proxy variables (same format as the systemd setup reads), and point your tunnel or reverse proxy at the port as usual. If you get the Node version warning, pass the right binary explicitly: `--node /usr/bin/node` — pinning an absolute path is recommended regardless, so the service never falls back to an older Node just because the shell's PATH changed.
 
 ## One-message deployment on a hosted agent VM
 
@@ -64,7 +98,7 @@ Not sure? Pick Claude Code only, a temporary URL, and just you. You can change a
 
 ## What you need
 
-- A Debian / Ubuntu machine with systemd, or a hosted agent VM.
+- A Debian / Ubuntu machine — with systemd, without systemd (see above), or a hosted agent VM.
 - For Claude Code: a Claude Pro or Max subscription. Generate the token **on your own computer** with `claude setup-token`. Don't sign in to Claude on the server.
 - For dimensio: an API key from at least one model provider.
 
@@ -138,4 +172,4 @@ The APK is signed with the key in the repository's Actions secrets (`ANDROID_KEY
 
 ## License
 
-[MIT](LICENSE). This project is a modified version of [muse-bridge](https://github.com/Wode44398/muse-bridge) (MIT). Use of Claude Code and the Claude Agent SDK is subject to Anthropic's terms; when deploying to a hosting platform, follow that platform's terms as well.
+[MIT](LICENSE) — see also [NOTICE](NOTICE): this project is a modified version of [muse-bridge](https://github.com/Wode44398/muse-bridge) (MIT). Use of Claude Code and the Claude Agent SDK is subject to Anthropic's terms; when deploying to a hosting platform, follow that platform's terms as well.

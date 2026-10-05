@@ -1,0 +1,13 @@
+WorkBuddy Bridge
+Copyright (c) 2026 WorkBuddy Bridge contributors
+
+This project is a modified version of muse-bridge
+(https://github.com/Wode44398/muse-bridge), also released under the MIT
+License. The original copyright notice and the MIT permission notice
+(see LICENSE) apply to all copies or substantial portions of the software.
+
+Additional notices:
+
+  * Use of Claude Code and the Claude Agent SDK is subject to Anthropic's
+    terms of service. When deploying to a hosting platform, follow that
+    platform's terms as well.

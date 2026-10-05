@@ -28,6 +28,9 @@
 # 出站只能走代理的机器：先 export HTTPS_PROXY=http://代理:端口 再跑，脚本会把代理带进服务环境。
 set -euo pipefail
 
+# 默认值与 deploy/workbuddy/bootstrap.sh（托管平台版安装器）保持一致：PORT、SVC_USER 两边必须相同，
+# 改一处要同步另一处。DATA 不同是有意的：平台 VM 上必须放 /home/hatch 底下（重启后平台只保留它），
+# 普通机器用 /var/lib/bridge，不要互相覆盖。
 PORT=8787
 HOST=127.0.0.1
 DATA=/var/lib/bridge
@@ -61,7 +64,9 @@ warn() { printf '\033[33m[!] %s\033[0m\n' "$*" >&2; }
 die() { printf '\033[31m[x] %s\033[0m\n' "$*" >&2; exit 1; }
 
 [ "$(id -u)" = 0 ] || die "请用 root 跑：sudo bash $0"
-command -v systemctl >/dev/null || die "这台机器没有 systemd。"
+# 无 systemd 的环境（容器、chroot）走 scripts/server/run-standalone.sh：同样的环境变量清单，
+# 前台拉起，外面套 keepalive 循环即可常驻（README「无 systemd 环境」一节有完整示例）。
+command -v systemctl >/dev/null || die "这台机器没有 systemd。两个选择：① 看看是不是容器（PID1=init/docker-init），用 scripts/server/run-standalone.sh 前台跑 + keepalive 循环常驻（README「Running without systemd」一节）；② 启用 systemd 后再跑本脚本。"
 command -v apt-get >/dev/null || die "目前只支持 Debian / Ubuntu（apt）。"
 
 REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
@@ -141,6 +146,14 @@ as_svc() { runuser -u "$SVC_USER" -- env HOME="$DATA/home" ${PROXY_LINES:+$(prin
 say "装 npm 依赖、构建前端（第一次要几分钟）"
 cd "$REPO"
 as_svc npm ci --omit=dev --no-audit --no-fund
+# node-pty 是网页终端的原生模块：新版 npm 的 install-scripts 门控（allowScripts）未来可能
+# 默认跳过它的编译脚本，产物缺失会让终端静默损坏——装完立刻验货，缺了现场重编。
+if ! as_svc sh -c 'ls node_modules/node-pty/build/Release/*.node >/dev/null 2>&1'; then
+  say "node-pty 原生模块没编译出来，现场重编"
+  as_svc npm rebuild node-pty
+  as_svc sh -c 'ls node_modules/node-pty/build/Release/*.node >/dev/null 2>&1' \
+    || die "node-pty 编译失败（网页终端会不可用）。看看上面 npm rebuild 的报错——通常是缺 python3/make/g++"
+fi
 # 前端会把 dimensio 的界面源码一起编进去，所以它的前端依赖总是要装；运行依赖只在选了 dimensio 时装
 as_svc npm --prefix harness/web ci --no-audit --no-fund
 if [ "$WANT_DIMENSIO" = 1 ]; then
@@ -225,9 +238,20 @@ UNIT
 if [ -n "$TUNNEL_TOKEN" ]; then
   say "装 cloudflared，起 bridge-tunnel.service"
   if ! command -v cloudflared >/dev/null; then
-    tmp="$(mktemp -d)"
-    curl -fsSL -o "$tmp/cloudflared.deb" "https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-$ARCH.deb"
-    dpkg -i "$tmp/cloudflared.deb"; rm -rf "$tmp"
+    # 优先走 Cloudflare 官方 apt 源（pkg.cloudflare.com，CDN 分发——GitHub 直链在一些网络下只有
+    # 几十 KB/s）；非 amd64/arm64 或加源失败再回退 GitHub 直链。
+    if { [ "$ARCH" = amd64 ] || [ "$ARCH" = arm64 ]; } \
+       && curl -fsSL --max-time 30 https://pkg.cloudflare.com/cloudflare-main.gpg -o /usr/share/keyrings/cloudflare-main.gpg \
+       && echo 'deb [signed-by=/usr/share/keyrings/cloudflare-main.gpg] https://pkg.cloudflare.com/cloudflared any main' > /etc/apt/sources.list.d/cloudflared.list \
+       && apt_wait update -y >/dev/null 2>&1 && apt_wait install -y cloudflared >/dev/null 2>&1; then
+      say "cloudflared 已从 Cloudflare apt 源装好"
+    else
+      warn "Cloudflare apt 源不可用，回退 GitHub 直链下载（可能较慢）"
+      tmp="$(mktemp -d)"
+      curl -fsSL --retry 3 -o "$tmp/cloudflared.deb" "https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-$ARCH.deb"
+      dpkg -i "$tmp/cloudflared.deb"; rm -rf "$tmp"
+      rm -f /etc/apt/sources.list.d/cloudflared.list
+    fi
   fi
   install -m 0600 /dev/null /etc/bridge/tunnel.env
   { echo "TUNNEL_TOKEN=$TUNNEL_TOKEN"; printf '%s' "$PROXY_LINES"; } > /etc/bridge/tunnel.env

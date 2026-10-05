@@ -21,7 +21,7 @@
 
 ## 在普通 Linux 服务器上装
 
-Debian / Ubuntu + systemd：
+Debian / Ubuntu，**有 systemd**：
 
 ```bash
 git clone https://github.com/shimoyanyamua/workbuddy-bridge.git /opt/workbuddy-bridge && cd /opt/workbuddy-bridge
@@ -31,6 +31,40 @@ sudo bash scripts/server/install.sh --agents claude,dimensio
 `install.sh --help` 查看全部选项。服务只听本机 127.0.0.1，对外访问需要你自己配隧道或反向代理（加 `--tunnel-token` 可以顺带起一条 Cloudflare 命名隧道）。更新用 `sudo bash scripts/server/update.sh`。
 
 装完浏览器打开服务地址，用安装时打印的管理员令牌登录。接着去「设置 → 连接 → 服务端控制台 → Claude 账号」把 Claude 订阅令牌填进去（见下节）。
+
+**我该走哪条安装路径？** 这个项目自带两套安装器，不能混用：
+
+| 你的机器 | 用哪个 |
+|---|---|
+| 特定托管平台的 agent VM（`/etc/hosts` 里有 `hatch-egress-proxy` 的那个平台；平台自带 hook/自动化系统） | `deploy/workbuddy/` —— 把下面的一键部署提示词发给平台 agent，由它跑 `bootstrap.sh` |
+| 其他 Debian/Ubuntu Linux，**有 systemd**（VPS、裸金属、自己的容器宿主） | `scripts/server/install.sh`（上面的命令） |
+| Debian/Ubuntu，**没有 systemd**（纯容器、chroot） | `scripts/server/run-standalone.sh` —— 见[无 systemd 环境运行](#无-systemd-环境运行) |
+
+把 `bootstrap.sh` 用到它的平台之外，它会立刻退出并告诉你原因——这是有意为之，换用 `install.sh` 就好。这条边界在 `WORKBUDDY.md` 开头也有声明。
+
+**核对下载的包。** `install.sh` 从 git 克隆构建，所以这一步只在你用发布包安装时适用：用 `workbuddy-bridge.tgz.sha256` 核对 `workbuddy-bridge.tgz`。如果这个小文件下载不动（有些网络过不了 release 资产的重定向），可以问 GitHub API 要它上传时记录的 digest，手动比对：
+
+```bash
+curl -fsSL https://api.github.com/repos/shimoyanyamua/workbuddy-bridge/releases/latest | jq -r '.assets[] | select(.name=="workbuddy-bridge.tgz") | .digest'   # → sha256:…
+sha256sum workbuddy-bridge.tgz
+```
+
+## 无 systemd 环境运行
+
+容器和 chroot 环境常常没有 systemd。服务本身并不需要它：`scripts/server/run-standalone.sh` 会前台拉起服务，环境变量和 systemd 单元设置的完全一样（数据目录、dimensio 路径、端口/监听地址），不会有东西悄悄缺失：
+
+```bash
+sudo bash scripts/server/run-standalone.sh                       # 默认：/var/lib/bridge，127.0.0.1:8787
+sudo bash scripts/server/run-standalone.sh --data /srv/bridge --port 8787 --host 127.0.0.1
+```
+
+想让进程崩了自动拉起（等价于单元里的 `Restart=always`），套一个 keepalive 循环——服务挂掉后几秒内就会回来：
+
+```bash
+while true; do sudo bash scripts/server/run-standalone.sh; sleep 3; done
+```
+
+把循环放到 `nohup`/`setsid` 或你自己的守护工具下面跑；再放一个 `/etc/bridge/bridge.env` 文件写 `CLAUDE_CODE_OAUTH_TOKEN` 和代理变量（格式和 systemd 方案读的相同）；隧道或反向代理照常指到这个端口。如果看到 Node 版本告警，显式传对二进制：`--node /usr/bin/node`——不管有没有告警都建议用绝对路径钉死，免得 shell 的 PATH 变了之后服务退回旧版 Node。
 
 ## 在托管平台的 VM 上一键部署
 
@@ -64,7 +98,7 @@ cd /tmp && curl -fLO --retry 3 https://github.com/shimoyanyamua/workbuddy-bridge
 
 ## 你需要准备
 
-- 一台 Debian / Ubuntu + systemd 的机器，或者一个托管平台的 VM。
+- 一台 Debian / Ubuntu 的机器——有 systemd、没有 systemd（见上文），或者一个托管平台的 agent VM。
 - 用 Claude Code：一个 Claude Pro 或 Max 订阅。令牌要在**你自己的电脑上**运行 `claude setup-token` 生成，不要在服务器上登录 Claude。
 - 用 dimensio：至少一家模型厂商的 API key。
 
@@ -138,4 +172,4 @@ apk 用仓库 Actions secrets 里的密钥签名（`ANDROID_KEYSTORE_BASE64`、`
 
 ## 协议
 
-[MIT](LICENSE)。本项目基于 [muse-bridge](https://github.com/Wode44398/muse-bridge)（MIT）改造而来。Claude Code 与 Claude Agent SDK 的使用受 Anthropic 自己的条款约束；部署到托管平台时，请同时遵守该平台的条款。
+[MIT](LICENSE)——另见 [NOTICE](NOTICE)：本项目基于 [muse-bridge](https://github.com/Wode44398/muse-bridge)（MIT）改造而来。Claude Code 与 Claude Agent SDK 的使用受 Anthropic 自己的条款约束；部署到托管平台时，请同时遵守该平台的条款。
