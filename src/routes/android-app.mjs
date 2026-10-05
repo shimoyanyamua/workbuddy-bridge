@@ -12,7 +12,7 @@ import { streamFile } from '../runtime/http-file.mjs';
 
 export const APK_NAME = 'WorkBuddyBridge.apk';
 export const APK_PATH = `/download/${APK_NAME}`;
-export const GITHUB_APK = `https://github.com/Wode44398/workbuddy-bridge/releases/latest/download/${APK_NAME}`;
+export const GITHUB_APK = `https://github.com/shimoyanyamua/workbuddy-bridge/releases/latest/download/${APK_NAME}`;
 const DOWNLOADS = path.join(PROGRAM_ROOT, 'downloads');
 
 // android.json 由发版流程写：{ versionName, versionCode, sha256 }

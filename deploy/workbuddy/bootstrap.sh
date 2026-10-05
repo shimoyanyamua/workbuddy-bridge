@@ -127,7 +127,7 @@ sites_summary() {   # 没放行 / 被拒的站点，空格分隔；文件不存�
 }
 
 # 安卓 app：每个版本的安装包里都带一份（downloads/，服务器自己提供下载），GitHub Release 上也有
-APK_GITHUB="https://github.com/Wode44398/workbuddy-bridge/releases/latest/download/WorkBuddyBridge.apk"
+APK_GITHUB="https://github.com/shimoyanyamua/workbuddy-bridge/releases/latest/download/WorkBuddyBridge.apk"
 
 # 统一的结果块：部署 agent 原样转给用户；管理员令牌在用户用它登录成功之前一直显示。UI_LANG=en 时整块英文
 result_block() {

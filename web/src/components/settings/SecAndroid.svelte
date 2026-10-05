@@ -11,7 +11,7 @@
   import SButton from './SButton.svelte';
   import { t } from '../../lib/i18n.js';
 
-  const GITHUB_RELEASES = 'https://github.com/Wode44398/workbuddy-bridge/releases/latest';
+  const GITHUB_RELEASES = 'https://github.com/shimoyanyamua/workbuddy-bridge/releases/latest';
   const app = typeof window !== 'undefined' ? window.WorkBuddyBridgeApp : null;
   const ua = navigator.userAgent || '';
   const android = /Android/i.test(ua);

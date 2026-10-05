@@ -53,8 +53,8 @@
 ```bash
 export HTTPS_PROXY=http://hatch-egress-proxy:3128 HTTP_PROXY=http://hatch-egress-proxy:3128
 REL=/home/hatch/bridge-releases/$(date +%Y%m%d-%H%M%S) && mkdir -p "$REL" && chmod 755 /home/hatch/bridge-releases "$REL"
-cd /tmp && curl -fLO --retry 3 https://github.com/Wode44398/workbuddy-bridge/releases/latest/download/workbuddy-bridge.tgz \
-  && curl -fLO --retry 3 https://github.com/Wode44398/workbuddy-bridge/releases/latest/download/workbuddy-bridge.tgz.sha256 \
+cd /tmp && curl -fLO --retry 3 https://github.com/shimoyanyamua/workbuddy-bridge/releases/latest/download/workbuddy-bridge.tgz \
+  && curl -fLO --retry 3 https://github.com/shimoyanyamua/workbuddy-bridge/releases/latest/download/workbuddy-bridge.tgz.sha256 \
   && sha256sum -c workbuddy-bridge.tgz.sha256 && tar -xzf workbuddy-bridge.tgz -C "$REL" && echo "解压到 $REL/bridge"
 ```
 
@@ -120,7 +120,7 @@ bash "$REL/bridge/deploy/workbuddy/bootstrap.sh" install --agents claude --solo
 - 令牌就是管理员密码，请马上存进密码管理器或备忘录。他用它登录成功一次之后，你这边就再也看不到它了；丢了可以找你重置，重置后旧令牌作废。
 - 用临时地址时：地址大约每几个小时变一次（VM 重启导致），变了你会主动告诉他，他也可以随时问你「地址是多少」。**令牌不会变，但换了地址要重新用令牌登录一次**（浏览器的登录状态是跟着网址存的）。嫌麻烦可以换成自己的域名（第 5 节）。
 - 这个地址谁拿到都能打开登录页，但没有令牌或账号进不去。
-- **顺带告诉他有安卓 app**（结果块里「安卓 app」那一行）：用安卓手机的浏览器打开地址，进「设置 → 安卓 app」就能下载安装；也可以直接从 GitHub 下载 `https://github.com/Wode44398/workbuddy-bridge/releases/latest/download/WorkBuddyBridge.apk`。app 跟网页版界面一样、随服务器自动更新，好处是桌面上有图标、记得住地址，临时地址变了能在 app 里直接换。iPhone 目前没有 app，用 Safari 的「添加到主屏幕」。
+- **顺带告诉他有安卓 app**（结果块里「安卓 app」那一行）：用安卓手机的浏览器打开地址，进「设置 → 安卓 app」就能下载安装；也可以直接从 GitHub 下载 `https://github.com/shimoyanyamua/workbuddy-bridge/releases/latest/download/WorkBuddyBridge.apk`。app 跟网页版界面一样、随服务器自动更新，好处是桌面上有图标、记得住地址，临时地址变了能在 app 里直接换。iPhone 目前没有 app，用 Safari 的「添加到主屏幕」。
 
 ## 4. 带用户上手
 
@@ -204,7 +204,7 @@ bash /home/hatch/bridge-ops/bootstrap.sh set-api-key ANTHROPIC_API_KEY <key>
 | 「让朋友也能用」「只给我自己用」 | `set-users multi` / `set-users solo` |
 | 结果块要换语言 | `set-lang en` / `set-lang zh` |
 | 「想要固定地址」 | 按第 5 节带他做 |
-| 「有手机 app 吗」「怎么装到手机上」 | 安卓：手机浏览器打开地址 →「设置 → 安卓 app」下载安装，或者给他 GitHub 链接 `https://github.com/Wode44398/workbuddy-bridge/releases/latest/download/WorkBuddyBridge.apk`；iPhone：Safari「分享 → 添加到主屏幕」 |
+| 「有手机 app 吗」「怎么装到手机上」 | 安卓：手机浏览器打开地址 →「设置 → 安卓 app」下载安装，或者给他 GitHub 链接 `https://github.com/shimoyanyamua/workbuddy-bridge/releases/latest/download/WorkBuddyBridge.apk`；iPhone：Safari「分享 → 添加到主屏幕」 |
 | 「app 打不开了」「app 连不上」 | 多半是临时地址换了：`status` 拿到新地址告诉他，让他在 app 弹出的面板里点「更换地址」粘进去 |
 | 「有新版本吗」 | `check-update`，把当前版本、最新版本、更新内容告诉他 |
 | 「更新」 | `update`（自己转后台、前台打印进度，完了贴结果块；没等完就 `wait`） |

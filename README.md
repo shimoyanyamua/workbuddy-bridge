@@ -11,7 +11,7 @@ The server listens on 127.0.0.1 only and is exposed through a Cloudflare tunnel 
 ## Highlights
 
 - **Works on phone and desktop.** The URL opens the full workspace. The interface is available in English and Simplified Chinese and follows your browser's language.
-- **Android app.** Install it from **Settings → Android app**, or [download the APK](https://github.com/Wode44398/workbuddy-bridge/releases/latest/download/WorkBuddyBridge.apk). It keeps your server address, and when a temporary URL changes you can switch to the new one right in the app. The interface is the same as the web version and updates with your server.
+- **Android app.** Install it from **Settings → Android app**, or [download the APK](https://github.com/shimoyanyamua/workbuddy-bridge/releases/latest/download/WorkBuddyBridge.apk). It keeps your server address, and when a temporary URL changes you can switch to the new one right in the app. The interface is the same as the web version and updates with your server.
 - **Full Claude Code.** Powered by the official Claude Agent SDK: tool use, subagents, workflows, context compaction and session resume. A side dock gives you a terminal, files, tasks and a diff review.
 - **dimensio, a multi-model workspace.** One API key per provider, switch models at any time, or add any OpenAI-compatible endpoint. It has its own workspaces, memory and subagents.
 - **Each provider's own web search.** Search uses the built-in search of whichever model the conversation is using, falls back to the next configured provider, and uses DuckDuckGo only as a last resort.
@@ -24,7 +24,7 @@ The server listens on 127.0.0.1 only and is exposed through a Cloudflare tunnel 
 On Debian / Ubuntu with systemd:
 
 ```bash
-git clone https://github.com/Wode44398/workbuddy-bridge.git /opt/workbuddy-bridge && cd /opt/workbuddy-bridge
+git clone https://github.com/shimoyanyamua/workbuddy-bridge.git /opt/workbuddy-bridge && cd /opt/workbuddy-bridge
 sudo bash scripts/server/install.sh --agents claude,dimensio
 ```
 
@@ -37,13 +37,13 @@ Once it's up, open the service address in a browser and sign in with the admin t
 If your server is a VM handed to you by a hosting platform with an agent on it, you can send the platform's agent this whole message and let it do the work:
 
 ````text
-I'd like you to install WorkBuddy Bridge on this VM, then show me how to use it. It's an open-source (MIT) project I picked: a browser-based workspace for Claude Code and other AI agents. Source and releases: https://github.com/Wode44398/workbuddy-bridge (it's new, so web search may not find it yet; open the link directly). Please talk to me in English.
+I'd like you to install WorkBuddy Bridge on this VM, then show me how to use it. It's an open-source (MIT) project I picked: a browser-based workspace for Claude Code and other AI agents. Source and releases: https://github.com/shimoyanyamua/workbuddy-bridge (it's new, so web search may not find it yet; open the link directly). Please talk to me in English.
 
 Step 1: download the latest release and verify its checksum.
 
 ```bash
 REL=/home/hatch/bridge-releases/$(date +%Y%m%d-%H%M%S) && mkdir -p "$REL" && chmod 755 /home/hatch/bridge-releases "$REL"
-cd /tmp && curl -fLO --retry 3 https://github.com/Wode44398/workbuddy-bridge/releases/latest/download/workbuddy-bridge.tgz && curl -fLO --retry 3 https://github.com/Wode44398/workbuddy-bridge/releases/latest/download/workbuddy-bridge.tgz.sha256 \
+cd /tmp && curl -fLO --retry 3 https://github.com/shimoyanyamua/workbuddy-bridge/releases/latest/download/workbuddy-bridge.tgz && curl -fLO --retry 3 https://github.com/shimoyanyamua/workbuddy-bridge/releases/latest/download/workbuddy-bridge.tgz.sha256 \
   && sha256sum -c workbuddy-bridge.tgz.sha256 && tar -xzf workbuddy-bridge.tgz -C "$REL" && echo "extracted to $REL/bridge"
 ```
 
@@ -89,7 +89,7 @@ Paste a key into dimensio's model panel yourself, or — if you installed with `
 
 ## Android app
 
-Open your WorkBuddy Bridge URL in your phone's browser, sign in, and go to **Settings → Android app → Download**. Once it's installed, come back to that page and tap **Open in app**: the app fills in the address for you. You can also [download the APK from GitHub](https://github.com/Wode44398/workbuddy-bridge/releases/latest/download/WorkBuddyBridge.apk) and paste the address the first time you open it.
+Open your WorkBuddy Bridge URL in your phone's browser, sign in, and go to **Settings → Android app → Download**. Once it's installed, come back to that page and tap **Open in app**: the app fills in the address for you. You can also [download the APK from GitHub](https://github.com/shimoyanyamua/workbuddy-bridge/releases/latest/download/WorkBuddyBridge.apk) and paste the address the first time you open it.
 
 The app is a thin shell around the same web interface, so it never needs updating for new features. If the server is unreachable (for example, the temporary URL changed after a restart), the app shows a **Change address** button; get the current URL and paste it in. If your phone blocks the install, allow your browser to install apps when it asks. There's no iPhone app; use Safari's **Share → Add to Home Screen** instead.
 

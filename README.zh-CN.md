@@ -11,7 +11,7 @@
 ## 亮点
 
 - **手机、电脑都能用**：打开网址就是完整的工作台，界面支持简体中文和 English，默认跟着浏览器语言。
-- **安卓 app**：在「设置 → 安卓 app」里下载，或者[直接下载 apk](https://github.com/Wode44398/workbuddy-bridge/releases/latest/download/WorkBuddyBridge.apk)。记得住服务器地址，临时地址变了能在 app 里直接换；界面和网页版一样，随服务器自动更新。
+- **安卓 app**：在「设置 → 安卓 app」里下载，或者[直接下载 apk](https://github.com/shimoyanyamua/workbuddy-bridge/releases/latest/download/WorkBuddyBridge.apk)。记得住服务器地址，临时地址变了能在 app 里直接换；界面和网页版一样，随服务器自动更新。
 - **Claude Code 完整体验**：由官方 Claude Agent SDK 驱动，支持工具调用、子 agent、工作流、上下文压缩和会话续接。右侧工作台有终端、文件、任务和改动审阅。
 - **dimensio 多模型工作台**：一家一把 key，随时切换模型；也能接任意 OpenAI 兼容的自定义服务。自带工作区、记忆和子 agent。
 - **各家原生联网搜索**：当前对话用哪家模型，就先用哪家自己的搜索，失败了自动换下一家，最后才退回 DuckDuckGo。
@@ -24,7 +24,7 @@
 Debian / Ubuntu + systemd：
 
 ```bash
-git clone https://github.com/Wode44398/workbuddy-bridge.git /opt/workbuddy-bridge && cd /opt/workbuddy-bridge
+git clone https://github.com/shimoyanyamua/workbuddy-bridge.git /opt/workbuddy-bridge && cd /opt/workbuddy-bridge
 sudo bash scripts/server/install.sh --agents claude,dimensio
 ```
 
@@ -37,13 +37,13 @@ sudo bash scripts/server/install.sh --agents claude,dimensio
 如果你的服务器是某个托管平台（agent VM）给的，可以把整段话发给平台上的 agent，让它替你装：
 
 ````text
-我想请你在这台 VM 上安装 WorkBuddy Bridge，装好后教我怎么用。这是我自己选的一个开源项目（MIT 协议）：一个能用浏览器打开的 Claude Code / AI agent 工作台。源码和发布包在 https://github.com/Wode44398/workbuddy-bridge （项目比较新，搜索引擎可能还搜不到，直接打开这个链接就行）。
+我想请你在这台 VM 上安装 WorkBuddy Bridge，装好后教我怎么用。这是我自己选的一个开源项目（MIT 协议）：一个能用浏览器打开的 Claude Code / AI agent 工作台。源码和发布包在 https://github.com/shimoyanyamua/workbuddy-bridge （项目比较新，搜索引擎可能还搜不到，直接打开这个链接就行）。
 
 第一步，下载最新的发布包并核对校验和：
 
 ```bash
 REL=/home/hatch/bridge-releases/$(date +%Y%m%d-%H%M%S) && mkdir -p "$REL" && chmod 755 /home/hatch/bridge-releases "$REL"
-cd /tmp && curl -fLO --retry 3 https://github.com/Wode44398/workbuddy-bridge/releases/latest/download/workbuddy-bridge.tgz && curl -fLO --retry 3 https://github.com/Wode44398/workbuddy-bridge/releases/latest/download/workbuddy-bridge.tgz.sha256 \
+cd /tmp && curl -fLO --retry 3 https://github.com/shimoyanyamua/workbuddy-bridge/releases/latest/download/workbuddy-bridge.tgz && curl -fLO --retry 3 https://github.com/shimoyanyamua/workbuddy-bridge/releases/latest/download/workbuddy-bridge.tgz.sha256 \
   && sha256sum -c workbuddy-bridge.tgz.sha256 && tar -xzf workbuddy-bridge.tgz -C "$REL" && echo "解压到 $REL/bridge"
 ```
 
@@ -89,7 +89,7 @@ key 可以直接在 dimensio 的模型面板里填；用 `bootstrap.sh` 装的�
 
 ## 安卓 app
 
-用手机浏览器打开你的 WorkBuddy Bridge 地址并登录，进「**设置 → 安卓 app → 下载**」。装好后回到这一页点「**在 app 里打开**」，app 会自动填好地址。也可以从 GitHub [直接下载 apk](https://github.com/Wode44398/workbuddy-bridge/releases/latest/download/WorkBuddyBridge.apk)，第一次打开时把地址粘进去。
+用手机浏览器打开你的 WorkBuddy Bridge 地址并登录，进「**设置 → 安卓 app → 下载**」。装好后回到这一页点「**在 app 里打开**」，app 会自动填好地址。也可以从 GitHub [直接下载 apk](https://github.com/shimoyanyamua/workbuddy-bridge/releases/latest/download/WorkBuddyBridge.apk)，第一次打开时把地址粘进去。
 
 app 只是把同一个网页界面装进独立窗口，新功能不用更新 app。连不上服务器时（比如重启后临时地址变了），app 会给出「更换地址」按钮，拿到现在的地址粘进去就行。手机拦着不让装时，按提示允许浏览器安装应用。iPhone 目前没有 app，可以用 Safari 的「分享 → 添加到主屏幕」。
 
