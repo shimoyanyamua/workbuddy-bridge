@@ -4,7 +4,7 @@
   // claude.ai-styled New/Edit form. Wired to /api/routines (the bridge backend).
   // Schedule is the bridge's friendly preset {type:daily|weekdays|weekly|hourly,...}
   // in GMT+8 — not cron. Palette here is intentionally black/white/gray (no accent).
-  import { caps, ui } from '../lib/state.svelte.js';
+  import { caps, ui, status } from '../lib/state.svelte.js';
   import { api } from '../lib/api.js';
   import { registerCloser } from '../lib/nav.js';
   import { claudeDefaultModel, claudeEffortFallback } from '../lib/caps.js';
@@ -189,10 +189,14 @@
             {#if enginePop}
               <button class="eng-bd" aria-label={t('关闭')} onclick={() => (enginePop = false)}></button>
               <div class="eng-pop">
-                <div class="eng-sec">{t('模型')}</div>
-                <div class="pills">
-                  {#each modelList as m}<button class="pill {(fModel || defModel) === m.id ? 'on' : ''}" onclick={() => (fModel = m.id)}>{tr(m.name)}</button>{/each}
-                </div>
+                {#if status.activeEngine?.custom}
+                  <div class="eng-sec">{status.activeEngine.model ? t('当前账号为第三方端点，模型固定为 {model}', { model: status.activeEngine.model }) : t('当前账号为第三方端点，模型以账号配置为准')}</div>
+                {:else}
+                  <div class="eng-sec">{t('模型')}</div>
+                  <div class="pills">
+                    {#each modelList as m}<button class="pill {(fModel || defModel) === m.id ? 'on' : ''}" onclick={() => (fModel = m.id)}>{tr(m.name)}</button>{/each}
+                  </div>
+                {/if}
                 <div class="eng-sec">{t('思考强度')}</div>
                 <div class="pills">
                   {#each effortList as e}<button class="pill {(fEffort || defEffort) === e.id ? 'on' : ''}" onclick={() => (fEffort = e.id)}>{tr(e.name)}</button>{/each}

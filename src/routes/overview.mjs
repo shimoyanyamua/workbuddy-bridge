@@ -18,6 +18,7 @@ import { statusState, getContext, pruneStaleLimits } from '../runtime/status.mjs
 import { getContextUsage, getEffort, getCommands } from '../runtime/ctx-usage.mjs';
 import { listSuggestions } from '../runtime/suggestions.mjs';
 import { maybeRefreshLimits } from '../runtime/usage-probe.mjs';
+import { activeEngineInfo } from '../runtime/claude-account.mjs';
 import { outboundProxyStatus, recheckOutboundProxy } from '../runtime/net-proxy.mjs';
 import { requireCtx } from '../runtime/identity.mjs';
 import { readBody } from '../runtime/body.mjs';
@@ -172,6 +173,7 @@ export function registerOverviewRoutes(router, { authOk, identify }) {
       limits: statusState.limits || {}, context: getContext(ctx.key, sid), updatedAt: statusState.updatedAt || 0, net: outboundProxyStatus(),
       contextUsage: getContextUsage(ctx.key, sid), effort: getEffort(ctx.key, sid),
       plan: statusState.plan || null,   // 套餐名（SDK usage 的 subscription_type，OAuth token 路径下常为空）
+      activeEngine: activeEngineInfo(), // 第三方端点激活时前端据此禁用模型选择器、显示实际模型
     }));
   });
 

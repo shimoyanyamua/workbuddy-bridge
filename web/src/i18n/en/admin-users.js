@@ -178,4 +178,28 @@ export default {
   '定时任务运行中': 'Routines running',
   '中止 = 调用该用户活跃生成的 abort（等价于该用户自己点「停止」）。长跑媒体（Veo/Lyria）按秒计费、故意跑完不中断，不在此列。':
     '“Stop” calls abort on that user’s active generation (the same as the user stopping it themselves). Long-running media jobs (Veo/Lyria) are billed per second and deliberately left to finish, so they aren’t listed here.',
+
+  // —— Claude 账号：第三方 Anthropic 兼容端点（SaAccounts.svelte）——
+  'Claude 账号': 'Claude accounts',
+  '类型': 'Type',
+  'Claude 订阅': 'Claude subscription',
+  '第三方兼容端点': 'Third-party compatible endpoint',
+  '第三方': '3rd-party',
+  '没有 Claude 订阅也能用：填 Kimi / DeepSeek / 智谱等提供的 **Anthropic 兼容地址**和 API Key。点下面按钮可快速填入常用端点。': 'Works without a Claude subscription: fill in an **Anthropic-compatible URL** and API key from Kimi, DeepSeek, Zhipu GLM and the like. Use the buttons below to fill in common endpoints quickly.',
+  '如：DeepSeek / Kimi / 备用': 'e.g. DeepSeek / Kimi / Backup',
+  '接口地址（Anthropic 兼容）': 'Endpoint URL (Anthropic-compatible)',
+  '模型名（可留空）': 'Model name (optional)',
+  '如 deepseek-chat / kimi-k3 / glm-4.6': 'e.g. deepseek-chat / kimi-k3 / glm-4.6',
+  '模型自动映射': 'model auto-mapped',
+  '测试连接': 'Test connection',
+  '会向该地址发一次最小请求（带上你填的 Key）': 'Sends one minimal request to that URL (with your key attached)',
+  '端点可用': 'Endpoint works',
+  '探活失败': 'Probe failed',
+  '先填接口地址和 API Key 再测试': 'Fill in the endpoint URL and API key first',
+  '接口地址不能为空': 'Endpoint URL cannot be empty',
+  'API Key 不能为空': 'API key cannot be empty',
+  '切换**即时全局生效**：admin 对话、用户沙箱、定时路由的下一次生成都会用新账号的额度（正在跑的那一轮不受影响）。': 'Switching takes effect **immediately and globally**: the next generation in admin chats, user sandboxes and scheduled routines uses the new account’s quota (a turn already running is unaffected).',
+  '所有账号**共享会话**（都落 ~/.claude）——一条对话可以在切号后无缝续聊：一号限流了切另一号接着聊。': 'All accounts **share sessions** (all under ~/.claude) — a conversation can continue seamlessly after a switch: when one account hits its limit, switch to another and keep chatting.',
+  '添加订阅账号的 token：在**对应账号**登录状态下运行 `claude setup-token`，把返回的长期 token 粘进来；留空 token = 用本机 ~/.claude 已登录凭证。': 'To add a subscription account: run `claude setup-token` while signed in to that account, then paste the long-lived token here. Leave it empty to use the credentials already signed in on the server (~/.claude).',
+  '**第三方兼容端点**：没有 Claude 订阅也能用 Claude 页——填 Kimi / DeepSeek / 智谱等提供的 Anthropic 兼容地址和 API Key。模型能力与工具调用支持以各家为准，额度按各家计费；激活后右上角的模型选择器会停用，以账号里配置的模型为准。': '**Third-party compatible endpoints**: use the Claude page without a Claude subscription — fill in an Anthropic-compatible URL and API key from Kimi, DeepSeek, Zhipu GLM and the like. Model quality and tool-use support vary by provider; usage is billed by each provider. While one is active, the model picker in the top right is disabled and the account’s configured model is used.',
 };

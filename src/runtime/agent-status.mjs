@@ -63,7 +63,7 @@ const AUTHED = {
     if (process.env.CLAUDE_CODE_OAUTH_TOKEN || process.env.ANTHROPIC_API_KEY) return true;
     let accounts = [];
     try { accounts = JSON.parse(readFileSync(CONFIG_PATH, 'utf8')).claudeAccounts || []; } catch {}
-    if (accounts.some((a) => a && a.token)) return true;
+    if (accounts.some((a) => a && (a.type === 'custom' ? a.apiKey : a.token))) return true;
     const cfgDir = process.env.CLAUDE_CONFIG_DIR || path.join(os.homedir(), '.claude');
     return existsSync(path.join(cfgDir, '.credentials.json'));
   },

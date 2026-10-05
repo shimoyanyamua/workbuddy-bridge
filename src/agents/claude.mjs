@@ -30,7 +30,7 @@ import { makeRetractLedger } from '../runtime/retract-ledger.mjs';
 import { sessionPaths, PROGRAM_ROOT } from '../runtime/paths.mjs';
 import os from 'node:os';
 import { collectDeliverables, deliverRoots, transcriptTailCwd } from '../runtime/deliverables.mjs';
-import { claudeEngineEnv } from '../runtime/claude-account.mjs';
+import { claudeEngineEnv, activeModelOverride, engineSig } from '../runtime/claude-account.mjs';
 import { sanitizeSessionThinking } from '../runtime/session-sanitize.mjs';
 import { addUsage, noteTurnStart } from '../users.mjs';
 import { quotaBlock } from '../runtime/quota.mjs';
@@ -92,6 +92,12 @@ export function identityNudge(model) {
   const name = m ? m.name : id;
   return '【你的真实身份】你是 Anthropic 的 Claude，当前模型：' + name +
     '（精确 model id: ' + id + '）。若用户问你是什么模型，以此为准，不要自报成别的版本号。\n\n';
+}
+
+// 第三方端点（custom 账号）激活时的身份行：底层不是 Claude 模型，别让 SDK preset 的
+// 「you are Claude」独自定调——我们的追加行更晚、显式，赢过 preset。
+export function thirdPartyNudge(model) {
+  return '【你的真实身份】你的底层模型是「' + (model || '第三方模型') + '」，由 Anthropic API 兼容端点提供，不是 Anthropic 的 Claude 模型；「Claude Code」只是宿主界面的名字。若用户问你是什么模型/谁训练了你，如实回答。\n\n';
 }
 
 // True if an error message is the SDK/API "thinking blocks cannot be modified" 400
@@ -509,12 +515,15 @@ export async function runClaudeChat(req, res, { message, sessionId, model, effor
 
   // 1M 默认开启（2026-07-12）：支持 [1m] 的模型一律直跑 1M 兄弟档——200k 以下按标准价
   // 计费，超了正好要大窗口，没有理由再走「近顶才升档」的旧 latch。picker 只见裸 id。
-  const effModel = to1M(model);
+  // custom（第三方端点）激活时：模型固定为账号配置的 model——UI 选择器里的官方 id 对
+  // 第三方端点没有意义（原样发过去多半 404），所以忽略 UI 选择。
+  const modelOverride = activeModelOverride();
+  const effModel = modelOverride || to1M(model);
 
   // ---- 启动参数（一律在这里算好：既喂给 query，也拼成 warmSig 判断停放的 CLI 能不能接着用）----
   // styleText（用户可控文本）拼在沙箱 nudge 之前——让沙箱铁律保持"最后说话"，
   // 降低自定义风格对软约束的对抗力（硬边界在 canUseTool，不受提示词影响）。
-  const appendText = identityNudge(model) + (STYLE_NUDGE[style] || (styleText ? '\n\n[回复风格 · 自定义] ' + styleText : '')) + (snap ? SNAP_NUDGE : ctx.sandbox ? (USER_NUDGE + (ctx.shell ? '' : REGULAR_NUDGE)) : (hostNudge() + HOST_TOOLS_NUDGE)) + (termOn ? TERMINAL_NUDGE : '') + (wsToolsOn ? WORKSPACE_NUDGE : '') + DELIVER_NUDGE + (research ? RESEARCH_NUDGE : '');
+  const appendText = (modelOverride ? thirdPartyNudge(modelOverride) : identityNudge(model)) + (STYLE_NUDGE[style] || (styleText ? '\n\n[回复风格 · 自定义] ' + styleText : '')) + (snap ? SNAP_NUDGE : ctx.sandbox ? (USER_NUDGE + (ctx.shell ? '' : REGULAR_NUDGE)) : (hostNudge() + HOST_TOOLS_NUDGE)) + (termOn ? TERMINAL_NUDGE : '') + (wsToolsOn ? WORKSPACE_NUDGE : '') + DELIVER_NUDGE + (research ? RESEARCH_NUDGE : '');
   // 当前激活的 Claude 账号 token（+ 沙箱 configDir）现取现注——切账号即时生效。
   const engineEnv = claudeEngineEnv(ctx);
   // effort：ultracode 不是 SDK 的 effort 取值（TS 类型只列五档）——翻译成 effort:'xhigh' +
@@ -539,7 +548,7 @@ export async function runClaudeChat(req, res, { message, sessionId, model, effor
   const warmSig = snap ? '' : createHash('sha256').update(JSON.stringify([
     ctx.key, normDir(ctx.cwd), ctx.configDir || '', ctx.media || '', normDir(ctx.homeRoot || ctx.cwd),
     effModel || '', effortOpts, sdkSettings, appendText, ext,
-    engineEnv ? [engineEnv.CLAUDE_CODE_OAUTH_TOKEN || '', engineEnv.CLAUDE_CONFIG_DIR || ''] : null,
+    engineEnv ? [engineSig(), engineEnv.CLAUDE_CONFIG_DIR || ''] : null,
     [!!ctx.sandbox, !!ctx.shell, termOn, wsToolsOn, wantSuggest],
   ])).digest('hex');
 

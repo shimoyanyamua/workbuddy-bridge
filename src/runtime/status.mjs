@@ -8,7 +8,7 @@
 import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { outboundHint } from './net-proxy.mjs';
-import { activeToken } from './claude-account.mjs';
+import { activeToken, getActiveAccount } from './claude-account.mjs';
 
 let _statusPath = '';
 // Rate limits are account-wide (everyone shares one upstream Claude subscription),
@@ -233,26 +233,34 @@ function resetHint(ms) {
 export function classifyError(raw, kind) {
   const s = String(raw == null ? '' : (raw.message || raw)).toLowerCase();
   const k = kind || '';
+  // 第三方端点（custom 账号）激活时：错误文案按「第三方」分支——别再引导用户跑 claude setup-token。
+  let customActive = false;
+  try { const a = getActiveAccount(); customActive = !!(a && a.type === 'custom' && a.apiKey); } catch {}
   if (k === 'rate_limit' || /rate.?limit|usage limit|too many requests|\b429\b/.test(s)) {
+    if (customActive) return { kind: 'rate_limit', title: '第三方端点限流', hint: '稍等片刻再发一次；频繁限流就到供应商控制台确认额度与套餐状态。' };
     const rej = lastRejection || {};
     return { kind: 'rate_limit', title: limitLabel(rej.type), hint: resetHint(rej.resetsAt) || '额度恢复后即可继续。', resetsAt: rej.resetsAt || 0 };
   }
   // 403 "Request not allowed" 是 Anthropic 按【出口 IP】拒绝的，SDK 会把它包成
   // "Failed to authenticate…" —— 长得像账号被封，其实是出站没走代理。必须排在 auth
   // 分支【之前】，否则会把人引去白查 token（2026-07-21 踩过）。
+  if (customActive && (/request not allowed/.test(s) || /\b403\b/.test(s))) {
+    return { kind: 'network', title: '第三方端点拒绝访问（403）', hint: '检查 API Key 的权限与套餐状态；出站走代理时，也确认这个端点域名能出去。' };
+  }
   if (/request not allowed/.test(s) || (/\b403\b/.test(s) && !/api key/.test(s))) {
     return { kind: 'network', title: '出海请求被网关拒绝（不是账号问题）', hint: '这是出口 IP 被拒，不是 token 失效。' + outboundHint('403 Request not allowed') };
   }
   if (k === 'authentication_failed' || /not logged in|unauthorized|\b401\b|oauth|invalid api key|authentication failed/.test(s)) {
     // 服务端从没配过认证（新装的服务器最常见）和配过但失效，是两种处理办法。
     // 控制台「Claude 账号」里加的令牌不进环境变量（每次 query 现注），也要算「配过」——否则令牌被撤销时会误报「还没配置」
-    const configured = Boolean(process.env.CLAUDE_CODE_OAUTH_TOKEN || process.env.ANTHROPIC_API_KEY || activeToken());
+    const configured = Boolean(process.env.CLAUDE_CODE_OAUTH_TOKEN || process.env.ANTHROPIC_API_KEY || activeToken() || customActive);
+    if (customActive) return { kind: 'auth', title: '第三方端点认证失败', hint: '检查「设置 → 连接 → 服务端控制台 → Claude 账号」里的 API Key 是否有效，接口地址与模型名是否正确。' };
     return configured
       ? { kind: 'auth', title: '登录已失效', hint: '令牌过期或被撤销：在你自己的电脑上重新运行 claude setup-token，把新令牌更新到「设置 → 连接 → 服务端控制台 → Claude 账号」。' }
-      : { kind: 'auth', title: '服务端还没配置 Claude 认证', hint: '在你自己的电脑上运行 claude setup-token 生成订阅令牌，然后在「设置 → 连接 → 服务端控制台 → Claude 账号」里添加。' };
+      : { kind: 'auth', title: '服务端还没配置 Claude 认证', hint: '在你自己的电脑上运行 claude setup-token 生成订阅令牌，然后在「设置 → 连接 → 服务端控制台 → Claude 账号」里添加；也可以添加第三方 Anthropic 兼容端点（Kimi / DeepSeek / GLM）。' };
   }
   if (k === 'billing_error' || /billing|payment|insufficient|out of credit/.test(s)) {
-    return { kind: 'billing', title: '账户额度 / 计费异常', hint: '检查 Claude 订阅或额度状态。' };
+    return { kind: 'billing', title: '账户额度 / 计费异常', hint: customActive ? '到供应商控制台检查余额与付费状态。' : '检查 Claude 订阅或额度状态。' };
   }
   if (k === 'server_error' || /overloaded|internal server|service unavailable|\b50\d\b|\b529\b/.test(s)) {
     return { kind: 'server', title: 'Claude 服务器暂时不可用', hint: '通常是临时过载，过一会儿再发一次。' };
@@ -261,7 +269,7 @@ export function classifyError(raw, kind) {
     return { kind: 'network', title: '连不上 Claude 服务器', hint: '检查家里 PC 的网络 / 隧道，或当前所在地区能否访问 api.anthropic.com。' };
   }
   if (k === 'model_not_found' || /model.*not.*found|unknown model|does not exist/.test(s)) {
-    return { kind: 'model', title: '所选模型不可用', hint: '在右上角换一个模型再试。' };
+    return { kind: 'model', title: '所选模型不可用', hint: customActive ? '第三方端点不认这个模型：到「服务端控制台 → Claude 账号」检查该账号配置的模型名。' : '在右上角换一个模型再试。' };
   }
   if (k === 'max_output_tokens' || /max_tokens|max output/.test(s)) {
     return { kind: 'maxout', title: '回答达到长度上限', hint: '让我「继续」即可接着输出。' };

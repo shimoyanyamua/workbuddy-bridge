@@ -65,6 +65,7 @@
       if (session.id && d.contextUsage && d.contextUsage.max) status.usages[session.id] = d.contextUsage;
       if (session.id && d.effort && typeof d.effort === 'object') status.efforts[session.id] = { level: d.effort.level || null, at: d.effort.at || Date.now() };
       if ('plan' in d) status.plan = d.plan || null;
+      status.activeEngine = d.activeEngine || null;   // 第三方端点激活 → 模型选择器停用
       status.updatedAt = d.updatedAt || Date.now();
     } catch {}
   }

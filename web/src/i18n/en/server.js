@@ -73,6 +73,21 @@ export default {
   'Claude 服务器暂时不可用 — {hint}': 'Claude’s servers are temporarily unavailable. {hint}',
   '连不上 Claude 服务器 — {hint}': 'Can’t reach Claude’s servers. {hint}',
   '所选模型不可用 — {hint}': 'The selected model is unavailable. {hint}',
+
+  // —— 第三方端点（custom Claude 账号）——
+  '第三方端点限流': 'Third-party endpoint is rate-limiting',
+  '第三方端点限流 — {hint}': 'Third-party endpoint is rate-limiting. {hint}',
+  '稍等片刻再发一次；频繁限流就到供应商控制台确认额度与套餐状态。': 'Wait a moment and send again. If it keeps happening, check your quota and plan in the provider’s console.',
+  '第三方端点拒绝访问（403）': 'Third-party endpoint refused access (403)',
+  '第三方端点拒绝访问（403） — {hint}': 'Third-party endpoint refused access (403). {hint}',
+  '检查 API Key 的权限与套餐状态；出站走代理时，也确认这个端点域名能出去。': 'Check the API key’s permissions and plan status. If traffic goes through a proxy, also make sure this endpoint’s domain can get out.',
+  '第三方端点认证失败': 'Third-party endpoint authentication failed',
+  '第三方端点认证失败 — {hint}': 'Third-party endpoint authentication failed. {hint}',
+  '检查「设置 → 连接 → 服务端控制台 → Claude 账号」里的 API Key 是否有效，接口地址与模型名是否正确。': 'Check that the API key in Settings → Connection → Admin console → Claude accounts is valid, and that the endpoint URL and model name are correct.',
+  '到供应商控制台检查余额与付费状态。': 'Check your balance and payment status in the provider’s console.',
+  '第三方端点不认这个模型：到「服务端控制台 → Claude 账号」检查该账号配置的模型名。': 'The third-party endpoint doesn’t recognize this model: check the model name configured on the account in Admin console → Claude accounts.',
+  '当前账号为第三方端点，模型固定为 {model}': 'The active account is a third-party endpoint; the model is fixed to {model}',
+  '当前账号为第三方端点，模型以账号配置为准': 'The active account is a third-party endpoint; the model follows the account’s configuration',
   '回答达到长度上限 — {hint}': 'The response hit the length limit. {hint}',
   '出错了 — {hint}': 'Something went wrong: {hint}',
 

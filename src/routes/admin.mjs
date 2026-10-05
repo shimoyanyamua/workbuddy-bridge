@@ -234,9 +234,18 @@ export function registerAdminRoutes(router, { authOk, adminCredential = null, ad
     J(res, { accounts: claudeAccounts.listAccounts() });
   });
   router.on('POST', '/api/admin/claude-account/active', userAction((b) => claudeAccounts.setActive(String(b.id || ''))));
-  router.on('POST', '/api/admin/claude-account/add', userAction((b) => claudeAccounts.addAccount({ label: b.label, token: b.token })));
-  router.on('POST', '/api/admin/claude-account/update', userAction((b) => claudeAccounts.updateAccount(String(b.id || ''), { label: b.label, token: b.token })));
+  router.on('POST', '/api/admin/claude-account/add', userAction((b) => claudeAccounts.addAccount({ label: b.label, type: b.type, token: b.token, baseUrl: b.baseUrl, apiKey: b.apiKey, model: b.model })));
+  router.on('POST', '/api/admin/claude-account/update', userAction((b) => claudeAccounts.updateAccount(String(b.id || ''), { label: b.label, type: b.type, token: b.token, baseUrl: b.baseUrl, apiKey: b.apiKey, model: b.model })));
   router.on('POST', '/api/admin/claude-account/delete', userAction((b) => claudeAccounts.deleteAccount(String(b.id || ''))));
+  // 第三方端点探活：发一次最小 messages 请求验证 baseUrl + apiKey（+ model）。纯探测，不落盘。
+  router.on('POST', '/api/admin/claude-account/probe', async (req, res) => {
+    if (!gate(req, res)) return;
+    const chunks = [];
+    for await (const c of req) chunks.push(c);
+    let b = {};
+    try { b = JSON.parse(Buffer.concat(chunks).toString('utf8') || '{}'); } catch {}
+    J(res, await claudeAccounts.probeCustom({ baseUrl: b.baseUrl, apiKey: b.apiKey, model: b.model }));
+  });
 
   // 聚合总览：所有活跃 gen + routines 运行中 + 用户数。一个端点喂满总览面板。
   router.on('GET', '/api/admin/overview', async (req, res) => {
