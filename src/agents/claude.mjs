@@ -801,6 +801,10 @@ export async function runClaudeChat(req, res, { message, sessionId, model, effor
   let ledger = makeRetractLedger();                  // 只记主线程；计数随 send 递增，帧到达时记区间
   let hookLevel = null;                              // ultracode 轮 Stop hook 回报的档位，等 settleEffort 定局
   let turnOut = 0, turnThink = 0; // running output / thinking token totals for the live thinking-status bar
+  // MiMo 等第三方兼容端点的流里 message_delta 不带 usage（output 恒缺）→ 状态行「0 tokens」。
+  // 兜底：主线程 assistant 帧的 usage.output_tokens 累加（同一 API 调用的帧值与 delta 值相等，
+  // 官方端点两者都到——deltaSeen 置位后帧值不再采纳，绝不重复计数）。
+  let tpDeltaSeen = false, tpFrameOut = 0;
   let lastMainUsage = null; // usage of the MAIN conversation's last API call (for real context fill)
   // CLI 认证失败时不走 API：发一条合成的 assistant（model:"<synthetic>"、error:'authentication_failed'，
   // 文字是「Not logged in · Please run /login」），result 却不标 is_error——记下来，定局时改发错误卡。
@@ -1191,7 +1195,7 @@ export async function runClaudeChat(req, res, { message, sessionId, model, effor
       // 每轮的计数与记账归零（后台任务表 / 任务门禁 / shell 封顶计时是整个进程的，不动）
       doneEmitted = false;
       interimResult = null;
-      turnOut = 0; turnThink = 0;
+      turnOut = 0; turnThink = 0; tpDeltaSeen = false; tpFrameOut = 0;
       authFailed = false;
       compactAwait = ''; compactSeen = false;
       compactCmd = /^\s*\/compact(?:\s|$)/.test(String(nmsg || ''));
@@ -1297,7 +1301,7 @@ export async function runClaudeChat(req, res, { message, sessionId, model, effor
       heldResult = null; interimResult = null; holdStartedAt = 0;
       shellSeenAt.clear(); cutShells.clear();
       softStopping = false;
-      turnOut = 0; turnThink = 0;
+      turnOut = 0; turnThink = 0; tpDeltaSeen = false; tpFrameOut = 0;
       authFailed = false;
       compactAwait = ''; compactSeen = false;
       compactCmd = /^\s*\/compact(?:\s|$)/.test(String(nmsg || ''));
@@ -1598,6 +1602,7 @@ export async function runClaudeChat(req, res, { message, sessionId, model, effor
           // across a multi-message turn. thinking_tokens is a subset of output.
           turnOut += ev.usage.output_tokens || 0;
           turnThink += (ev.usage.output_tokens_details && ev.usage.output_tokens_details.thinking_tokens) || 0;
+          if ((ev.usage.output_tokens || 0) > 0) tpDeltaSeen = true;
           send({ type: 'usage', output: turnOut, thinking: turnThink });
         }
       } else if (msg.type === 'assistant') {
@@ -1613,6 +1618,14 @@ export async function runClaudeChat(req, res, { message, sessionId, model, effor
           // API round-trip in the turn (a multi-tool turn sums each round's cache read, so a
           // 200k window reported ~1.6M and pinned the bar at a bogus 100%).
           if (msg.message && msg.message.usage) lastMainUsage = msg.message.usage;
+          // 帧兜底：message_delta 缺 usage 的端点（MiMo 等）在这里补上 output 实时值。
+          // 帧值 = 该次 API 调用的最终 output_tokens，多轮工具循环逐帧累加；
+          // deltaSeen（官方端点）为真时帧值不采纳，避免同一调用双计。
+          const frameOut = (msg.message && msg.message.usage && msg.message.usage.output_tokens) || 0;
+          if (frameOut > 0) {
+            tpFrameOut += frameOut;
+            if (!tpDeltaSeen) { turnOut = tpFrameOut; send({ type: 'usage', output: turnOut, thinking: turnThink }); }
+          }
           if (msg.error === 'authentication_failed') authFailed = true;
           // 撤回记账：回退模型重试的首条 assistant 帧带 supersedes[]（与通知里的 retracted 名单同一份，幂等）；
           // 先撤再把本帧覆盖的区间记下来（上一帧结束 → 当前计数），供之后的撤回名单按 uuid 对账。
