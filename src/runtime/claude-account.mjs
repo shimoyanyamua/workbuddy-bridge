@@ -16,14 +16,16 @@
 // 一条对话可在切换后无缝续聊（A 号限流了切到 B 号接着聊同一个会话）。
 //
 // config.json 形状：
-//   claudeAccounts: [{ id, label, type: 'oauth'|'custom', token, baseUrl, apiKey, model }]
+//   claudeAccounts: [{ id, label, type: 'oauth'|'custom', token, baseUrl, apiKey, models: [], model }]
 //   claudeActiveAccount: <id>
-// 向后兼容：旧条目无 type 视为 oauth。
+// 向后兼容：旧条目无 type 视为 oauth；旧 custom 条目只有 model 单值 → 读时自动升级为单元素
+// models 列表（model 始终是 models[0] 的派生镜像，persist 时两个字段都写）。
 // 迁移：若无 claudeAccounts 但有旧的 oauthToken，自动播种一个「默认账号」。
 
 import { readFileSync, writeFileSync } from 'node:fs';
 import { randomBytes } from 'node:crypto';
 import { CONFIG_PATH, OAUTH } from '../config/index.mjs';
+import { CLAUDE_MODELS } from '../config/capabilities.mjs';
 
 let accounts = [];   // [{ id, label, type, token, baseUrl, apiKey, model }]
 let activeId = '';
@@ -49,8 +51,24 @@ function normalizeBase(u) {
   return b;
 }
 
+// 模型列表规范化：trim / 去空 / 去重 / 封顶 20（防手滑贴一大版列表撑爆 config）。
+// models 字段是 v0.1.2 新增；旧条目只有 model 单值 → 视为单元素列表（读取时自动升级）。
+function normalizeModels(models, fallbackModel) {
+  const src = Array.isArray(models) ? models : [fallbackModel];
+  const out = [];
+  for (const x of src) {
+    const v = typeof x === 'string' ? x.trim() : '';
+    if (v && !out.includes(v)) out.push(v);
+    if (out.length >= 20) break;
+  }
+  return out;
+}
+
 // 规范化一条账号：旧条目（无 type）视为 oauth；custom 字段全部保留（缺省空串）。
+// model 是 models[0] 的派生镜像（默认模型）——所有旧读取方（engineSig / env 五件套 /
+// activeModelOverride）不用改；persist 时两个字段都写，旧版本 bridge 降级读 model 也不丢。
 function normalizeAccount(a) {
+  const models = normalizeModels(a.models, a.model);
   return {
     id: String(a.id || newId()),
     label: String(a.label || ''),
@@ -58,7 +76,8 @@ function normalizeAccount(a) {
     token: String(a.token || ''),
     baseUrl: normalizeBase(a.baseUrl),
     apiKey: String(a.apiKey || ''),
-    model: String(a.model || '').trim(),
+    models,
+    model: models[0] || '',
   };
 }
 
@@ -93,10 +112,34 @@ export function activeAuth() {
   return { type: 'oauth', token: a.token };
 }
 
-// custom 激活且配了 model 时返回它——聊天 / 定时路由用它覆盖 UI 选的官方模型名。
+// custom 激活且配了 model 时返回默认模型——定时路由等未显式选模型的调用方用它兜底。
 export function activeModelOverride() {
   const a = getActiveAccount();
   return a && a.type === 'custom' && a.model ? a.model : '';
+}
+
+// custom 激活判定（chat 路由校验分流用）：有 baseUrl+apiKey 才算真正可用。
+export function activeIsCustom() {
+  const a = getActiveAccount();
+  return !!(a && a.type === 'custom' && a.apiKey);
+}
+
+// custom 激活时返回账号配置的模型列表（主对话可在其中切换），否则空数组。
+export function activeCustomModels() {
+  const a = getActiveAccount();
+  return a && a.type === 'custom' && a.apiKey ? (a.models || []) : [];
+}
+
+export function activeCustomModelSet() { return new Set(activeCustomModels()); }
+
+// 聊天/代聊请求 model 字段校验分流：custom 激活时合法集合 = 账号模型列表（可在聊天框像原生
+// 一样切换），oauth 时 = 官方白名单。非法值返回 ''（调用方回落默认），绝不报错——切账号瞬间
+// 前端残留的旧模型 id 不该炸掉请求。
+export function resolveChatModel(parsedModel) {
+  const v = typeof parsedModel === 'string' ? parsedModel.trim() : '';
+  if (!v) return '';
+  if (activeIsCustom()) return activeCustomModelSet().has(v) ? v : '';
+  return CLAUDE_MODELS.has(v) ? v : '';
 }
 
 // 引擎身份签名：warm CLI 复用判定用。baseUrl/apiKey/model/token 任一变化都会换签名，
@@ -107,11 +150,11 @@ export function engineSig() {
   return a.type === 'custom' ? ('c:' + a.baseUrl + '|' + a.apiKey + '|' + a.model) : ('o:' + a.token);
 }
 
-// /api/status 用：前端据此禁用模型选择器、显示当前第三方模型。
+// /api/status 用：前端据此在模型选择器里渲染第三方模型列表（model = 默认）。
 export function activeEngineInfo() {
   const a = getActiveAccount();
-  if (!a || a.type !== 'custom' || !a.apiKey) return { custom: false, model: '' };
-  return { custom: true, model: a.model };
+  if (!a || a.type !== 'custom' || !a.apiKey) return { custom: false, model: '', models: [] };
+  return { custom: true, model: a.model, models: [...(a.models || [])] };
 }
 
 // 给前端的安全视图：不外泄完整凭据，只给尾 6 位供辨认；custom 的 baseUrl/model 非敏感，明文回显。
@@ -119,7 +162,7 @@ export function listAccounts() {
   return accounts.map((a) => {
     const base = { id: a.id, label: a.label, active: a.id === activeId, type: a.type };
     if (a.type === 'custom') {
-      return { ...base, baseUrl: a.baseUrl, model: a.model, hasKey: !!a.apiKey, keyTail: a.apiKey ? a.apiKey.slice(-6) : '' };
+      return { ...base, baseUrl: a.baseUrl, models: [...(a.models || [])], model: a.model, hasKey: !!a.apiKey, keyTail: a.apiKey ? a.apiKey.slice(-6) : '' };
     }
     return { ...base, hasToken: !!a.token, tokenTail: a.token ? a.token.slice(-6) : '' };
   });
@@ -131,18 +174,18 @@ export function setActive(id) {
   return { ok: true, active: activeId };
 }
 
-export function addAccount({ label, type, token, baseUrl, apiKey, model } = {}) {
+export function addAccount({ label, type, token, baseUrl, apiKey, model, models } = {}) {
   const l = String(label || '').trim() || ('账号 ' + (accounts.length + 1));
   if (type === 'custom') {
     const b = normalizeBase(baseUrl);
     if (!/^https?:\/\//.test(b)) return { error: '接口地址必须是 http(s):// 开头' };
     const k = String(apiKey || '').trim();
     if (!k) return { error: 'API Key 不能为空' };
-    const m = String(model || '').trim();
+    const ms = normalizeModels(Array.isArray(models) ? models : [model], '');
     const id = newId();
-    accounts.push({ id, label: l, type: 'custom', token: '', baseUrl: b, apiKey: k, model: m });
+    accounts.push({ id, label: l, type: 'custom', token: '', baseUrl: b, apiKey: k, models: ms, model: ms[0] || '' });
     persist();
-    return { ok: true, id, ...(m ? {} : { warning: '模型名留空：若该端点不支持 claude-* 模型自动映射，请求会 404，建议填写' }) };
+    return { ok: true, id, ...(ms.length ? {} : { warning: '模型名留空：若该端点不支持 claude-* 模型自动映射，请求会 404，建议填写' }) };
   }
   const t = String(token || '').trim();
   if (!t) return { error: 'token 不能为空（在该账号下跑 claude setup-token 获取）' };
@@ -152,7 +195,7 @@ export function addAccount({ label, type, token, baseUrl, apiKey, model } = {}) 
   return { ok: true, id };
 }
 
-export function updateAccount(id, { label, type, token, baseUrl, apiKey, model } = {}) {
+export function updateAccount(id, { label, type, token, baseUrl, apiKey, model, models } = {}) {
   const a = accounts.find((x) => x.id === id);
   if (!a) return { error: '无此账号' };
   if (typeof label === 'string' && label.trim()) a.label = label.trim();
@@ -176,7 +219,12 @@ export function updateAccount(id, { label, type, token, baseUrl, apiKey, model }
       a.baseUrl = b;
     }
     if (typeof apiKey === 'string' && apiKey.trim()) a.apiKey = apiKey.trim();   // 留空 = 不改
-    if (typeof model === 'string') a.model = model.trim();                       // 可显式清空
+    // 模型列表：传 models 数组整表替换；只传 model 字符串按旧语义视为单元素列表（空串=清空）。
+    if (Array.isArray(models) || typeof model === 'string') {
+      const ms = normalizeModels(Array.isArray(models) ? models : [model], '');
+      a.models = ms;
+      a.model = ms[0] || '';
+    }
   } else {
     if (typeof token === 'string' && token.trim()) a.token = token.trim();       // 留空 = 不改
   }
@@ -224,6 +272,37 @@ export function claudeEngineEnv(ctx) {
     touched = true;
   }
   return touched ? env : null;
+}
+
+// 拉取第三方端点的模型列表：GET {base}/v1/models（Anthropic 官方同款列表接口，多数兼容
+// 端点也已实现；不确定支持 → 失败时返回 ok:false，前端回退手动填写）。纯读取不落盘。
+export async function fetchCustomModels({ baseUrl, apiKey } = {}) {
+  const b = normalizeBase(baseUrl);
+  const k = String(apiKey || '').trim();
+  if (!/^https?:\/\//.test(b) || !k) return { ok: false, kind: 'input', message: '接口地址或 API Key 未填写' };
+  try {
+    const res = await fetch(b + '/v1/models', {
+      headers: { 'anthropic-version': '2023-06-01', Authorization: 'Bearer ' + k },
+      signal: AbortSignal.timeout(15_000),
+    });
+    if (!res.ok) {
+      if (res.status === 401 || res.status === 403) return { ok: false, kind: 'auth', message: `API Key 被拒绝（HTTP ${res.status}）` };
+      return { ok: false, kind: 'http', message: `端点不支持模型列表（HTTP ${res.status}），请手动填写模型名` };
+    }
+    const json = await res.json().catch(() => null);
+    // 兼容三种形状：{data:[{id}]}（Anthropic/OpenAI）、{models:[…]}、裸数组；元素取 id/name 或字符串本身。
+    const arr = Array.isArray(json) ? json : Array.isArray(json && json.data) ? json.data : Array.isArray(json && json.models) ? json.models : [];
+    const models = [];
+    for (const m of arr) {
+      const v = (m && typeof m === 'object' ? String(m.id || m.name || '') : String(m || '')).trim();
+      if (v && !models.includes(v)) models.push(v);
+      if (models.length >= 20) break;
+    }
+    if (!models.length) return { ok: false, kind: 'empty', message: '端点返回了空模型列表，请手动填写模型名' };
+    return { ok: true, models };
+  } catch (e) {
+    return { ok: false, kind: 'network', message: '连不上端点：' + ((e && e.message) || e) };
+  }
 }
 
 // 第三方端点探活：发一次最小 messages 请求（max_tokens:1，成本可忽略）。

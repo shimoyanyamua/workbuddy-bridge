@@ -145,11 +145,11 @@ test('engineSig：custom/oauth 互异；model 变则签名变（warm CLI 防误�
 
 test('activeModelOverride / activeEngineInfo / activeAuth / activeToken', () => {
   assert.equal(m.activeModelOverride(), 'deepseek-chat');
-  assert.deepEqual(m.activeEngineInfo(), { custom: true, model: 'deepseek-chat' });
+  assert.deepEqual(m.activeEngineInfo(), { custom: true, model: 'deepseek-chat', models: ['deepseek-chat'] });
   assert.equal(m.activeAuth().type, 'custom');
   m.setActive('a-oauth');
   assert.equal(m.activeModelOverride(), '');
-  assert.deepEqual(m.activeEngineInfo(), { custom: false, model: '' });
+  assert.deepEqual(m.activeEngineInfo(), { custom: false, model: '', models: [] });
   assert.equal(m.activeAuth().type, 'oauth');
   assert.equal(m.activeToken(), 'sk-ant-oat-example');
   m.setActive('a-custom');
@@ -179,6 +179,80 @@ test('probeCustom：输入缺失走 input 分支（不联网）', async () => {
   const bad = await m.probeCustom({ baseUrl: '', apiKey: '' });
   assert.equal(bad.kind, 'input');
   assert.equal(bad.ok, false);
+});
+
+// ---------- v0.1.2：模型列表（models 数组）+ 拉取 + 聊天校验分流 ----------
+
+test('init：旧 custom 条目只有 model 单值 → 读时自动升级为单元素 models', () => {
+  const r = spawnCheck({ claudeAccounts: [{ id: 'a-c', label: 'M', type: 'custom', baseUrl: 'https://m.example.com/anthropic', apiKey: 'sk-m-999999', model: 'mimo-v2.6-pro' }], claudeActiveAccount: 'a-c' }, `
+    const v = m.listAccounts().find((a) => a.id === 'a-c');
+    console.log(JSON.stringify({ models: v.models, model: v.model, engine: m.activeEngineInfo() }));
+  `);
+  assert.deepEqual(r.models, ['mimo-v2.6-pro']);
+  assert.equal(r.model, 'mimo-v2.6-pro');
+  assert.deepEqual(r.engine, { custom: true, model: 'mimo-v2.6-pro', models: ['mimo-v2.6-pro'] });
+});
+
+test('addAccount：models 数组清洗（trim/去空/去重/封顶 20），model 派生为首位', () => {
+  const r = m.addAccount({ label: '列表', type: 'custom', baseUrl: 'https://lst.example.com/anthropic', apiKey: 'sk-ls-1', models: [' a ', 'a', '', 'b', null, 3] });
+  assert.equal(r.ok, true);
+  const a = m.listAccounts().find((x) => x.label === '列表');
+  assert.deepEqual(a.models, ['a', 'b']);
+  assert.equal(a.model, 'a');
+  m.addAccount({ label: '封顶', type: 'custom', baseUrl: 'https://cap.example.com/anthropic', apiKey: 'sk-cp-1', models: Array.from({ length: 30 }, (_, i) => 'm' + i) });
+  const cap = m.listAccounts().find((x) => x.label === '封顶');
+  assert.equal(cap.models.length, 20);
+});
+
+test('updateAccount：models 整表替换；只传 model 按旧语义视为单元素；models/model 都不传则不动', () => {
+  const id = m.listAccounts().find((x) => x.label === '列表').id;
+  const cur = () => m.listAccounts().find((x) => x.id === id);
+  m.updateAccount(id, { models: ['x1', 'x2'] });
+  assert.deepEqual(cur().models, ['x1', 'x2']);
+  m.updateAccount(id, { model: 'solo' });
+  assert.deepEqual(cur().models, ['solo']);
+  m.updateAccount(id, { label: '列表改名' });
+  assert.deepEqual(cur().models, ['solo'], '不带 models/model 的更新不得动列表');
+  m.updateAccount(id, { models: [] });
+  assert.deepEqual(cur().models, []);
+});
+
+test('resolveChatModel：custom 激活按账号列表校验；oauth 走官方白名单；非法一律空串', async () => {
+  // 当前主实例激活 a-custom（models 被 update 清空过 → 先补上）
+  m.updateAccount('a-custom', { models: ['deepseek-chat', 'deepseek-reasoner'] });
+  assert.equal(m.resolveChatModel('deepseek-reasoner'), 'deepseek-reasoner');
+  assert.equal(m.resolveChatModel(' claude-opus-5-5 '), '', 'custom 时官方 id 不在账号列表 → 空');
+  assert.equal(m.resolveChatModel('不存在的模型'), '');
+  assert.equal(m.resolveChatModel(undefined), '');
+  // 切到 oauth：官方白名单恢复生效
+  const official = [...(await import('../config/capabilities.mjs')).CLAUDE_MODELS][0];
+  m.setActive('a-oauth');
+  assert.equal(m.resolveChatModel(official), official);
+  assert.equal(m.resolveChatModel('mimo-v2.6-pro'), '', 'oauth 时第三方 id 非法 → 空');
+  m.setActive('a-custom');
+  m.updateAccount('a-custom', { models: ['deepseek-chat'] });
+});
+
+test('fetchCustomModels：data[].id 解析 / 非 200 / 网络错误（mock fetch，不联网）', async () => {
+  const realFetch = globalThis.fetch;
+  try {
+    globalThis.fetch = async () => ({ ok: true, status: 200, json: async () => ({ data: [{ id: 'mimo-v2.6-pro' }, { id: 'mimo-v2.6-flash' }, { name: 'glm-5' }, '裸字符串', {}] }) });
+    const ok = await m.fetchCustomModels({ baseUrl: 'https://x.example.com/anthropic', apiKey: 'sk-1' });
+    assert.equal(ok.ok, true);
+    assert.deepEqual(ok.models, ['mimo-v2.6-pro', 'mimo-v2.6-flash', 'glm-5', '裸字符串'], '去重 + 容忍多种元素形状');
+    globalThis.fetch = async () => ({ ok: false, status: 404, json: async () => ({}) });
+    const nf = await m.fetchCustomModels({ baseUrl: 'https://x.example.com/anthropic', apiKey: 'sk-1' });
+    assert.equal(nf.ok, false);
+    assert.equal(nf.kind, 'http');
+    globalThis.fetch = async () => { throw new Error('ECONNREFUSED'); };
+    const net = await m.fetchCustomModels({ baseUrl: 'https://x.example.com/anthropic', apiKey: 'sk-1' });
+    assert.equal(net.ok, false);
+    assert.equal(net.kind, 'network');
+    const bad = await m.fetchCustomModels({ baseUrl: '', apiKey: '' });
+    assert.equal(bad.kind, 'input');
+  } finally {
+    globalThis.fetch = realFetch;
+  }
 });
 
 test('cleanup', () => { for (const d of DIRS) { try { rmSync(d, { recursive: true, force: true }); } catch {} } assert.ok(true); });

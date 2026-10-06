@@ -42,7 +42,7 @@
     return bits.join(' · ');
   };
   const AUTH_HINT = {
-    claude: t('在「服务端控制台 → Claude 账号」里添加 claude setup-token 生成的长期 token、或第三方 Anthropic 兼容端点（Kimi / DeepSeek / GLM），也可在服务器环境里配 ANTHROPIC_API_KEY。'),
+    claude: t('在「服务端控制台 → Claude 账号」里添加 claude setup-token 生成的长期 token、或第三方 Anthropic 兼容端点（小米 MiMo / Kimi / DeepSeek / 智谱），也可在服务器环境里配 ANTHROPIC_API_KEY。'),
     dimensio: t('在 dimensio 的 .env 里填至少一家厂商的 API key。'),
   };
   const editionLine = $derived(!data ? '' : (data.edition === 'host' ? t('主机端') : tc('settings', '服务端')) + ' · ' + (data.features?.multiUser ? t('多用户') : t('单人')));

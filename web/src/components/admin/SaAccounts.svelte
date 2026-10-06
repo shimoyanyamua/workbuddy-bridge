@@ -8,16 +8,50 @@
 
   $effect(() => { sa.tick; loadAccounts(); });
 
-  let editModal = $state(null);   // { id?, label, type: 'oauth'|'custom', token, baseUrl, apiKey, model, isNew }
-  let busy = $state(false);
+  let editModal = $state(null);   // { id?, label, type: 'oauth'|'custom', token, baseUrl, apiKey, models: [], newModel, isNew, ...tails }
+  let busy = $state(false), pulling = $state(false);
 
-  // 第三方端点快捷预设：baseUrl + 常用示例模型（模型可改可清空）
+  // 第三方端点快捷预设：baseUrl + 常用模型列表（可增删，第一个为默认）
   const PRESETS = [
-    { name: 'Kimi', baseUrl: 'https://api.moonshot.cn/anthropic', model: 'kimi-k3' },
-    { name: 'DeepSeek', baseUrl: 'https://api.deepseek.com/anthropic', model: '' },
-    { name: '智谱 GLM', baseUrl: 'https://open.bigmodel.cn/api/anthropic', model: 'glm-4.6' },
+    { name: 'Kimi', baseUrl: 'https://api.moonshot.cn/anthropic', models: ['kimi-k3'] },
+    { name: 'DeepSeek', baseUrl: 'https://api.deepseek.com/anthropic', models: [] },
+    { name: '智谱 GLM', baseUrl: 'https://open.bigmodel.cn/api/anthropic', models: ['glm-4.6'] },
+    { name: '小米 MiMo', baseUrl: 'https://api.xiaomimimo.com/anthropic', models: ['mimo-v2.6-pro'] },
   ];
-  function applyPreset(p) { if (editModal) { editModal.baseUrl = p.baseUrl; editModal.model = p.model; } }
+  function applyPreset(p) { if (editModal) { editModal.baseUrl = p.baseUrl; editModal.models = [...p.models]; } }
+
+  // ---- 模型列表（chips）管理：第一个 = 默认模型；拉取失败（端点不支持 /v1/models）回退手动填 ----
+  function addModel() {
+    if (!editModal) return;
+    const v = String(editModal.newModel || '').trim();
+    if (!v) return;
+    if (!editModal.models.includes(v)) editModal.models = [...editModal.models, v];
+    editModal.newModel = '';
+  }
+  function addModelKey(e) { if (e.key === 'Enter') { e.preventDefault(); addModel(); } }
+  function removeModel(i) { if (editModal) editModal.models = editModal.models.filter((_, j) => j !== i); }
+  function makeDefault(i) { if (editModal) editModal.models = [editModal.models[i], ...editModal.models.filter((_, j) => j !== i)]; }
+  function mergeModels(list) {
+    if (!editModal || !Array.isArray(list)) return;
+    const merged = [...editModal.models];
+    for (const x of list) { const v = String(x || '').trim(); if (v && !merged.includes(v)) merged.push(v); }
+    editModal.models = merged;
+  }
+  async function pullModels() {
+    const m = editModal; if (!m || pulling) return;
+    if (!m.baseUrl.trim() || !(m.apiKey.trim() || (!m.isNew && m.hasKey))) { saToast(t('先填接口地址和 API Key 再拉取'), true); return; }
+    pulling = true;
+    try {
+      const r = await api.post('/api/admin/claude-account/models', { baseUrl: m.baseUrl.trim(), apiKey: m.apiKey.trim() });
+      if (r?.ok && Array.isArray(r.models)) {
+        mergeModels(r.models);
+        saToast(t('拉到 {n} 个模型，可在此增删', { n: m.models.length }));
+      } else {
+        saToast((r && r.message) || t('端点不支持模型列表，请手动填写'), true);
+      }
+    } catch (e) { saToast(tr(e?.message) || t('拉取失败'), true); }
+    pulling = false;
+  }
 
   // 脚注整句一个键：键里用 **加粗**、`代码` 标出行内的 <b> / <code>，渲染时切段（中文 DOM 与原来一致）
   const rich = (s) => s.split(/(\*\*[^*]+\*\*|`[^`]+`)/).filter(Boolean);
@@ -26,17 +60,21 @@
     try { const r = await api.post('/api/admin/claude-account/active', { id: a.id }); if (r?.error) throw new Error(r.error); saToast(t('已切换到 {name}', { name: accLabel(a.label) })); loadAccounts(); }
     catch (e) { saToast(tr(e?.message) || t('切换失败'), true); }
   }
-  function openAdd() { editModal = { label: '', type: 'oauth', token: '', baseUrl: '', apiKey: '', model: '', isNew: true }; }
+  function openAdd() { editModal = { label: '', type: 'oauth', token: '', baseUrl: '', apiKey: '', models: [], newModel: '', isNew: true }; }
   function openEdit(a) {
-    editModal = { id: a.id, label: accLabel(a.label), type: a.type === 'custom' ? 'custom' : 'oauth', token: '', baseUrl: a.baseUrl || '', apiKey: '', model: a.model || '', isNew: false, hasToken: a.hasToken, tokenTail: a.tokenTail, hasKey: a.hasKey, keyTail: a.keyTail };
+    editModal = { id: a.id, label: accLabel(a.label), type: a.type === 'custom' ? 'custom' : 'oauth', token: '', baseUrl: a.baseUrl || '', apiKey: '', models: [...(a.models || (a.model ? [a.model] : []))], newModel: '', isNew: false, hasToken: a.hasToken, tokenTail: a.tokenTail, hasKey: a.hasKey, keyTail: a.keyTail };
   }
   async function testConn() {
     const m = editModal; if (!m || busy) return;
-    if (!m.baseUrl.trim() || !m.apiKey.trim()) { saToast(t('先填接口地址和 API Key 再测试'), true); return; }
+    if (!m.baseUrl.trim() || !(m.apiKey.trim() || (!m.isNew && m.hasKey))) { saToast(t('先填接口地址和 API Key 再测试'), true); return; }
     busy = true;
     try {
-      const r = await api.post('/api/admin/claude-account/probe', { baseUrl: m.baseUrl.trim(), apiKey: m.apiKey.trim(), model: m.model.trim() });
-      if (r?.ok) saToast(t('端点可用'));
+      const r = await api.post('/api/admin/claude-account/probe', { baseUrl: m.baseUrl.trim(), apiKey: m.apiKey.trim(), model: (m.models[0] || '').trim() });
+      if (r?.ok) {
+        // 探活时端点顺手回了模型列表（模型留空时服务端自动拉取兜底）——直接合并进表单。
+        if (Array.isArray(r.models) && r.models.length) { mergeModels(r.models); saToast(t('端点可用，并拉到 {n} 个模型', { n: r.models.length })); }
+        else saToast(t('端点可用'));
+      }
       else saToast((r && r.message) || t('探活失败'), true);
     } catch (e) { saToast(tr(e?.message) || t('探活失败'), true); }
     busy = false;
@@ -51,7 +89,7 @@
     busy = true;
     try {
       const body = m.type === 'custom'
-        ? { label: m.label.trim(), type: 'custom', baseUrl: m.baseUrl.trim(), apiKey: m.apiKey.trim(), model: m.model.trim() }
+        ? { label: m.label.trim(), type: 'custom', baseUrl: m.baseUrl.trim(), apiKey: m.apiKey.trim(), models: m.models }
         : { label: m.label.trim(), type: 'oauth', token: m.token.trim() };
       const r = m.isNew
         ? await api.post('/api/admin/claude-account/add', body)
@@ -91,7 +129,7 @@
             <span style="font-weight:650">{accLabel(a.label)}{#if a.type === 'custom'}<span class="sa-badge gray" style="margin-left:6px">{t('第三方')}</span>{/if}</span>
             <small class="sa-mono">
               {#if a.type === 'custom'}
-                {a.baseUrl || '—'}{#if a.model}&nbsp;·&nbsp;{a.model}{:else}&nbsp;·&nbsp;{t('模型自动映射')}{/if}{#if a.hasKey}&nbsp;·&nbsp;…{a.keyTail}{/if}
+                {a.baseUrl || '—'}{#if (a.models || []).length}&nbsp;·&nbsp;{a.models.join(' · ')}{:else}&nbsp;·&nbsp;{t('模型自动映射')}{/if}{#if a.hasKey}&nbsp;·&nbsp;…{a.keyTail}{/if}
               {:else}
                 {a.hasToken ? '…' + (a.tokenTail || '') : t('用本机登录态（~/.claude）')}
               {/if}
@@ -112,7 +150,7 @@
   {@render richLine(t('切换**即时全局生效**：admin 对话、用户沙箱、定时路由的下一次生成都会用新账号的额度（正在跑的那一轮不受影响）。'))}<br />
   {@render richLine(t('所有账号**共享会话**（都落 ~/.claude）——一条对话可以在切号后无缝续聊：一号限流了切另一号接着聊。'))}<br />
   {@render richLine(t('添加订阅账号的 token：在**对应账号**登录状态下运行 `claude setup-token`，把返回的长期 token 粘进来；留空 token = 用本机 ~/.claude 已登录凭证。'))}<br />
-  {@render richLine(t('**第三方兼容端点**：没有 Claude 订阅也能用 Claude 页——填 Kimi / DeepSeek / 智谱等提供的 Anthropic 兼容地址和 API Key。模型能力与工具调用支持以各家为准，额度按各家计费；激活后右上角的模型选择器会停用，以账号里配置的模型为准。'))}
+  {@render richLine(t('**第三方兼容端点**：没有 Claude 订阅也能用 Claude 页——填小米 MiMo / Kimi / DeepSeek / 智谱等提供的 Anthropic 兼容地址和 API Key。模型能力与工具调用支持以各家为准，额度按各家计费；激活后聊天框的模型选择器会列出账号里配置的模型，可像原生一样切换，思考强度照常可调。'))}
 </div>
 
 {#if editModal}
@@ -143,8 +181,20 @@
       <input class="sa-in sa-mono" style="font-size:12.5px"
         placeholder={editModal.isNew ? 'sk-…' : (editModal.hasKey ? t('留空＝不改，当前 …{tail}', { tail: editModal.keyTail || '' }) : 'sk-…')}
         bind:value={editModal.apiKey} />
-      <div class="sa-lab">{t('模型名（可留空）')}</div>
-      <input class="sa-in sa-mono" style="font-size:12.5px" placeholder={t('如 deepseek-chat / kimi-k3 / glm-4.6')} bind:value={editModal.model} />
+      <div class="sa-lab">{t('模型列表（第一个为默认，可留空）')}</div>
+      <div class="mchips">
+        {#each editModal.models as m, i (m + ':' + i)}
+          <span class="mchip">
+            {#if i === 0}<b class="mdef" title={t('默认模型')}>★</b>{/if}
+            <span class="sa-mono">{m}</span>
+            {#if i > 0}<button type="button" title={t('设为默认')} onclick={() => makeDefault(i)}>↑</button>{/if}
+            <button type="button" title={t('移除')} onclick={() => removeModel(i)}>×</button>
+          </span>
+        {/each}
+        <input class="sa-in sa-mono mnew" style="font-size:12.5px" placeholder={t('输入模型名后回车添加，如 mimo-v2.6-pro')} bind:value={editModal.newModel} onkeydown={addModelKey} onblur={addModel} />
+        <button class="sa-btn sm" type="button" onclick={pullModels} disabled={pulling}>{pulling ? t('拉取中…') : t('拉取模型列表')}</button>
+      </div>
+      <small style="opacity:.6;display:block;margin-top:4px">{t('「拉取」调端点的 /v1/models 列表接口；不支持时手动输入。聊天框里可在这份列表中像原生一样切换模型。')}</small>
       <div style="margin-top:10px;display:flex;align-items:center;gap:8px;flex-wrap:wrap">
         <button class="sa-btn sm" type="button" onclick={testConn} disabled={busy}>{t('测试连接')}</button>
         <small style="opacity:.6">{t('会向该地址发一次最小请求（带上你填的 Key）')}</small>
@@ -169,6 +219,13 @@
   .seg button.on { background: rgba(255,255,255,.12); color: #fff; font-weight: 600; }
   /* 预设快捷填充行 */
   .presets { display: flex; gap: 6px; margin: 6px 0 2px; flex-wrap: wrap; }
+  /* 模型列表 chips：第一个为默认（★），↑ 上移为默认、× 移除；输入框行内追加 */
+  .mchips { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
+  .mchip { display: inline-flex; align-items: center; gap: 5px; padding: 3px 8px; border-radius: 8px; background: rgba(255,255,255,.08); font-size: 12.5px; }
+  .mchip .mdef { color: #f5c451; font-weight: 700; }
+  .mchip button { background: transparent; border: 0; color: rgba(255,255,255,.55); cursor: pointer; font-size: 12px; padding: 0 1px; line-height: 1; }
+  .mchip button:hover { color: #fff; }
+  .mnew { flex: 1; min-width: 180px; }
   /* 英文「Switch to this account」按钮宽得多：窄屏上徽章 + 账号名占一行、按钮换到下一行（只在 :lang(en) 下，中文不变） */
   @media (max-width: 560px) {
     .sa-row:lang(en) { flex-wrap: wrap; row-gap: 8px; }

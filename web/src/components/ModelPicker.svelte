@@ -24,40 +24,54 @@
   // 只是不显示也不随请求发送（Composer 芯片与发送侧都按同一支持表门控）。
   const fastOk = $derived((caps.data?.claude?.fast || []).includes(curModelId));
 
-  // 第三方端点（custom Claude 账号）激活：模型固定为账号配置的 model，选择器停用（提示置顶）。
-  const tpModel = $derived(status.activeEngine?.custom ? String(status.activeEngine.model || '') : '');
+  // 第三方端点（custom Claude 账号）激活：模型列表来自账号配置，选中行可点——和原生一样的
+  // 切换体验（后端 resolveChatModel 按账号列表校验，非法值回落默认）。fast mode 仅官方模型
+  // 支持（第三方 id 不在 caps.claude.fast → 整段隐藏）。
+  const tpModels = $derived(status.activeEngine?.custom ? (status.activeEngine.models || []) : []);
   const thirdParty = $derived(status.activeEngine?.custom || false);
+  // 当前生效的第三方模型：显式选过且在列表里 → 之；否则列表第一个（与后端回落规则一致）。
+  const tpCur = $derived(tpModels.includes(settings.model) ? settings.model : (tpModels[0] || ''));
 
-  // 改即记（chatPrefs）：没发送就杀后台，选择也不丢。第三方激活时一律不生效。
-  function pickModel(id) { if (thirdParty) return; settings.model = id; rememberCurrentPrefs(); onClose && onClose(); }
-  function toggleFast() { if (thirdParty) return; settings.fast = !settings.fast; rememberCurrentPrefs(); }
+  // 改即记（chatPrefs）：没发送就杀后台，选择也不丢。
+  function pickModel(id) { settings.model = id; rememberCurrentPrefs(); onClose && onClose(); }
+  function toggleFast() { settings.fast = !settings.fast; rememberCurrentPrefs(); }
 </script>
 
 <button class="mp-backdrop" aria-label={t('关闭')} onclick={() => onClose && onClose()}></button>
 <div class="mp" class:down={dir === 'down'} role="menu" use:clampX>
   {#if view === 'main'}
     {#if thirdParty}
-      <div class="mp-tp">{tpModel ? t('当前账号为第三方端点，模型固定为 {model}', { model: tpModel }) : t('当前账号为第三方端点，模型以账号配置为准')}</div>
-    {/if}
-    <div class="mp-label">Models</div>
-    {#each split.primary as m (m.id)}
-      <button class="mp-row" class:off={thirdParty} role="menuitemradio" aria-checked={m.id === curModelId} aria-disabled={thirdParty} onclick={() => pickModel(m.id)}>
-        <span class="mp-name">{m.name}</span>
-        {#if m.id === curModelId}<svg class="mp-check" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4.5 10.5l3.5 3.5 7.5-8"/></svg>{/if}
-      </button>
-    {/each}
-    <div class="mp-div"></div>
-    <button class="mp-row" class:off={thirdParty} aria-disabled={thirdParty} onclick={() => { if (!thirdParty) view = 'more'; }}>
-      <span class="mp-name">More models</span>
-      <svg class="mp-chev" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M7.5 5l5 5-5 5"/></svg>
-    </button>
-    {#if fastOk}
+      <div class="mp-tp">{tpModels.length ? t('已连接第三方端点，思考强度可正常切换') : t('当前账号为第三方端点，模型以账号配置为准')}</div>
+      {#if tpModels.length}
+        <div class="mp-label">Models</div>
+        {#each tpModels as id (id)}
+          <button class="mp-row" role="menuitemradio" aria-checked={id === tpCur} onclick={() => pickModel(id)}>
+            <span class="mp-name">{id}</span>
+            {#if id === tpCur}<svg class="mp-check" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4.5 10.5l3.5 3.5 7.5-8"/></svg>{/if}
+          </button>
+        {/each}
+      {/if}
+    {:else}
+      <div class="mp-label">Models</div>
+      {#each split.primary as m (m.id)}
+        <button class="mp-row" role="menuitemradio" aria-checked={m.id === curModelId} onclick={() => pickModel(m.id)}>
+          <span class="mp-name">{m.name}</span>
+          {#if m.id === curModelId}<svg class="mp-check" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4.5 10.5l3.5 3.5 7.5-8"/></svg>{/if}
+        </button>
+      {/each}
       <div class="mp-div"></div>
-      <div class="mp-label">Fast mode</div>
-      <button class="mp-row" role="menuitemcheckbox" aria-checked={settings.fast} onclick={toggleFast}>
-        <span class="mp-name">Enable fast mode</span>
-        <span class="mp-switch" class:on={settings.fast} aria-hidden="true"><span class="mp-knob"></span></span>
+      <button class="mp-row" onclick={() => (view = 'more')}>
+        <span class="mp-name">More models</span>
+        <svg class="mp-chev" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M7.5 5l5 5-5 5"/></svg>
       </button>
+      {#if fastOk}
+        <div class="mp-div"></div>
+        <div class="mp-label">Fast mode</div>
+        <button class="mp-row" role="menuitemcheckbox" aria-checked={settings.fast} onclick={toggleFast}>
+          <span class="mp-name">Enable fast mode</span>
+          <span class="mp-switch" class:on={settings.fast} aria-hidden="true"><span class="mp-knob"></span></span>
+        </button>
+      {/if}
     {/if}
   {:else}
     <button class="mp-row mp-back" onclick={() => (view = 'main')}>
@@ -66,7 +80,7 @@
     </button>
     <div class="mp-div"></div>
     {#each split.rest as m (m.id)}
-      <button class="mp-row" class:off={thirdParty} role="menuitemradio" aria-checked={m.id === curModelId} aria-disabled={thirdParty} onclick={() => pickModel(m.id)}>
+      <button class="mp-row" role="menuitemradio" aria-checked={m.id === curModelId} onclick={() => pickModel(m.id)}>
         <span class="mp-name">{m.name}</span>
         {#if m.id === curModelId}<svg class="mp-check" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4.5 10.5l3.5 3.5 7.5-8"/></svg>{/if}
       </button>
@@ -86,11 +100,8 @@
   @keyframes mpPop { from { opacity: 0; transform: scale(.97); } to { opacity: 1; transform: none; } }
   .mp.down { bottom: auto; top: calc(100% + 8px); }
   .mp-label { padding: 4px 12px 2px; font-size: 12px; color: var(--muted); }
-  /* 第三方端点提示条 + 停用的行 */
+  /* 第三方端点提示条（模型列表行复用 .mp-row） */
   .mp-tp { margin: 4px 8px 2px; padding: 7px 9px; font-size: 12px; line-height: 1.5; color: var(--text); background: var(--hover); border-radius: 8px; }
-  .mp-row.off { opacity: .45; cursor: default; }
-  .mp-row.off:active { background: transparent; }
-  @media (hover: hover) { .mp-row.off:hover { background: transparent; } }
   /* 官方行规格：min-h 28（官方 24，触屏放宽）/px 12/13.5px */
   .mp-row { width: 100%; min-height: 28px; display: flex; align-items: center; gap: 8px; padding: 5px 12px; text-align: left; }
   .mp-row:active { background: var(--hover); }

@@ -9,7 +9,8 @@ import { handleAnswer } from '../runtime/questions.mjs';
 import { runClaudeChat } from '../agents/claude.mjs';
 import * as claudeProjects from '../claude-projects.mjs';
 import { createSessionWorktree } from '../claude-worktrees.mjs';
-import { CLAUDE_MODELS, CLAUDE_EFFORTS, ULTRACODE } from '../config/capabilities.mjs';
+import { CLAUDE_EFFORTS, ULTRACODE } from '../config/capabilities.mjs';
+import { resolveChatModel, activeIsCustom } from '../runtime/claude-account.mjs';
 import { MODEL } from '../config/index.mjs';
 import { contextFor } from '../runtime/identity.mjs';
 import { touchSnap, SNAP_MAX_TURNS, snapAllowsFable } from './chat-snapshot.mjs';
@@ -48,7 +49,10 @@ export function registerChatRoutes(router, { authOk, identify }) {
       parsed.research = false;
       touchSnap(ctx.snap.token);   // 用户消息 → 续 1 小时销毁倒计时
     }
-    let model = CLAUDE_MODELS.has(parsed.model) ? parsed.model : (MODEL || undefined);
+    // 模型校验分流（resolveChatModel）：custom 激活时合法集合 = 账号模型列表（聊天框可像原生
+    // 一样切换第三方模型），非法值 → undefined 让引擎回落账号默认；oauth 时 = 官方白名单，
+    // 非法值回落服务端默认 MODEL。
+    let model = resolveChatModel(parsed.model) || (activeIsCustom() ? undefined : (MODEL || undefined));
     // 快照（公开链接）禁用 Fable 时（覆盖整个 Fable 5.x 档），把 Fable 请求降级到默认模型——
     // 前端选择器已隐藏该项，这里再拦一道，防抓包直接指定 claude-fable-5 / -5-1 / 其 [1m] 兄弟档。
     if (isSnap && !snapAllowsFable(ctx.snap.token) && /^claude-fable-5(-1)?(\[1m\])?$/.test(model || '')) {
@@ -62,7 +66,7 @@ export function registerChatRoutes(router, { authOk, identify }) {
     // 会话级选择器记忆：记「用户显式选了什么」而非 clamp 后的回落值——没选就存 null，
     // 恢复时选择器回到「默认」态，服务端默认将来变了也跟着走。快照访客不记。
     const chatPrefs = isSnap ? null : {
-      model: CLAUDE_MODELS.has(parsed.model) ? parsed.model : null,
+      model: resolveChatModel(parsed.model) || null,
       effort: CLAUDE_EFFORTS.has(parsed.effort) ? parsed.effort : null,
       fast,
     };

@@ -13,12 +13,12 @@ import { query } from '@anthropic-ai/claude-agent-sdk';
 import * as routines from '../routines.mjs';
 import { markBridgeSession, markRoutineSession } from './gen.mjs';
 import { applyRateLimit, applyContext } from './status.mjs';
-import { hostNudge, USER_NUDGE, REGULAR_NUDGE, NO_SHELL_MSG, sandboxViolation, identityNudge, thirdPartyNudge, makeSandboxPreToolUse, SHELL_DENY, makeTurnInput, isPhantomResult } from '../agents/claude.mjs';
+import { hostNudge, USER_NUDGE, REGULAR_NUDGE, NO_SHELL_MSG, sandboxViolation, identityNudge, thirdPartyNudge, resolveTpModel, makeSandboxPreToolUse, SHELL_DENY, makeTurnInput, isPhantomResult } from '../agents/claude.mjs';
 import { UPLOADS, MEDIA, MODEL } from '../config/index.mjs';
 import { to1M, claudeEffortOptions } from '../config/capabilities.mjs';
 import { contextFor, userIdentity } from './identity.mjs';
 import { FEATURES } from '../config/index.mjs';
-import { claudeEngineEnv, activeModelOverride } from './claude-account.mjs';
+import { claudeEngineEnv, activeModelOverride, activeEngineInfo } from './claude-account.mjs';
 import { claudeExtensionOptions } from '../extensions.mjs';
 import { addUsage } from '../users.mjs';
 import * as users from '../users.mjs';
@@ -82,8 +82,14 @@ async function runClaudeRoutine(ctx, r) {
   // ultracode，这里是旧数据 / 手改文件的兜底，别把 SDK 不认的档名原样塞进 query。
   const effortOpts = claudeEffortOptions(r.effort);
   const notes = [];   // model_* 系统帧（安全栅门切换等）的官方文案——无人值守没有 UI，记进结果预览
-  // custom（第三方端点）激活时：模型固定为账号配置的 model，身份行也换成第三方版。
-  const routineOverride = activeModelOverride();
+  // custom（第三方端点）激活时：任务模型若在账号列表里就用它（编辑任务时可选第三方模型），
+  // 否则（旧任务存的原生 id / 未选）回落账号默认；身份行也换成第三方版。
+  // oauth 时照旧：官方 id 过 to1M，未选回落服务端默认。
+  const tpRoutine = activeEngineInfo();
+  const effRoutineModel = tpRoutine.custom
+    ? resolveTpModel(tpRoutine, r.model || '')
+    : to1M(r.model || MODEL);
+  const appendIdentity = tpRoutine.custom ? thirdPartyNudge(effRoutineModel) : identityNudge(r.model || MODEL);
   const q = query({
     prompt: turnInput.stream,
     options: {
@@ -92,9 +98,9 @@ async function runClaudeRoutine(ctx, r) {
       mcpServers: ctx.sandbox ? {} : { ...ext.mcpServers },
       ...(ext.plugins.length ? { plugins: ext.plugins } : {}),
       // snapshot:false 同 claude.mjs：SDK 0.3.267 起默认首轮录制复用，换模型后的身份 nudge 会被冻住。
-      systemPrompt: { type: 'preset', preset: 'claude_code', snapshot: false, append: (routineOverride ? thirdPartyNudge(routineOverride) : identityNudge(r.model || MODEL)) + (ctx.sandbox ? (USER_NUDGE + (ctx.shell ? '' : REGULAR_NUDGE)) : hostNudge()) + ROUTINE_NUDGE },
+      systemPrompt: { type: 'preset', preset: 'claude_code', snapshot: false, append: appendIdentity + (ctx.sandbox ? (USER_NUDGE + (ctx.shell ? '' : REGULAR_NUDGE)) : hostNudge()) + ROUTINE_NUDGE },
       ...((() => { const e = claudeEngineEnv(ctx); return e ? { env: e } : {}; })()),
-      model: to1M(routineOverride || r.model || MODEL),
+      model: effRoutineModel,
       ...(effortOpts.effort ? { effort: effortOpts.effort } : {}),
       ...(effortOpts.settings ? { settings: JSON.stringify(effortOpts.settings) } : {}),
       // 沙箱用户的定时路由同样套硬边界（PreToolUse hook 含只读 + 无 shell disallow + 设置隔离）。

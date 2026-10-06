@@ -30,7 +30,7 @@ import { makeRetractLedger } from '../runtime/retract-ledger.mjs';
 import { sessionPaths, PROGRAM_ROOT } from '../runtime/paths.mjs';
 import os from 'node:os';
 import { collectDeliverables, deliverRoots, transcriptTailCwd } from '../runtime/deliverables.mjs';
-import { claudeEngineEnv, activeModelOverride, engineSig } from '../runtime/claude-account.mjs';
+import { claudeEngineEnv, activeEngineInfo, engineSig } from '../runtime/claude-account.mjs';
 import { sanitizeSessionThinking } from '../runtime/session-sanitize.mjs';
 import { addUsage, noteTurnStart } from '../users.mjs';
 import { quotaBlock } from '../runtime/quota.mjs';
@@ -98,6 +98,18 @@ export function identityNudge(model) {
 // 「you are Claude」独自定调——我们的追加行更晚、显式，赢过 preset。
 export function thirdPartyNudge(model) {
   return '【你的真实身份】你的底层模型是「' + (model || '第三方模型') + '」，由 Anthropic API 兼容端点提供，不是 Anthropic 的 Claude 模型；「Claude Code」只是宿主界面的名字。若用户问你是什么模型/谁训练了你，如实回答。\n\n';
+}
+
+// 本轮实际模型解析（纯函数，便于直测）：
+//   custom 激活 → 请求模型在账号模型列表里就用它（聊天框像原生一样切换），否则回落账号
+//   默认 models[0]——第三方 id 绝不过 to1M（那是官方 1M 兄弟档后缀，第三方端点不认）；
+//   oauth → 官方 id 照旧过 to1M。
+export function resolveTpModel(tp, model) {
+  if (tp && tp.custom) {
+    const ms = Array.isArray(tp.models) ? tp.models : [];
+    return (model && ms.includes(model)) ? model : (ms[0] || '');
+  }
+  return to1M(model);
 }
 
 // True if an error message is the SDK/API "thinking blocks cannot be modified" 400
@@ -515,15 +527,16 @@ export async function runClaudeChat(req, res, { message, sessionId, model, effor
 
   // 1M 默认开启（2026-07-12）：支持 [1m] 的模型一律直跑 1M 兄弟档——200k 以下按标准价
   // 计费，超了正好要大窗口，没有理由再走「近顶才升档」的旧 latch。picker 只见裸 id。
-  // custom（第三方端点）激活时：模型固定为账号配置的 model——UI 选择器里的官方 id 对
-  // 第三方端点没有意义（原样发过去多半 404），所以忽略 UI 选择。
-  const modelOverride = activeModelOverride();
-  const effModel = modelOverride || to1M(model);
+  // custom（第三方端点）激活时：模型在账号列表里可选（聊天框像原生一样切换），请求带合法
+  // 第三方 id 就用之，否则回落账号默认——UI 里的官方 id 对第三方端点没有意义（原样发过去
+  // 多半 404），所以官方 id 一律忽略。
+  const tp = activeEngineInfo();
+  const effModel = resolveTpModel(tp, model);
 
   // ---- 启动参数（一律在这里算好：既喂给 query，也拼成 warmSig 判断停放的 CLI 能不能接着用）----
   // styleText（用户可控文本）拼在沙箱 nudge 之前——让沙箱铁律保持"最后说话"，
   // 降低自定义风格对软约束的对抗力（硬边界在 canUseTool，不受提示词影响）。
-  const appendText = (modelOverride ? thirdPartyNudge(modelOverride) : identityNudge(model)) + (STYLE_NUDGE[style] || (styleText ? '\n\n[回复风格 · 自定义] ' + styleText : '')) + (snap ? SNAP_NUDGE : ctx.sandbox ? (USER_NUDGE + (ctx.shell ? '' : REGULAR_NUDGE)) : (hostNudge() + HOST_TOOLS_NUDGE)) + (termOn ? TERMINAL_NUDGE : '') + (wsToolsOn ? WORKSPACE_NUDGE : '') + DELIVER_NUDGE + (research ? RESEARCH_NUDGE : '');
+  const appendText = (tp.custom ? thirdPartyNudge(effModel) : identityNudge(model)) + (STYLE_NUDGE[style] || (styleText ? '\n\n[回复风格 · 自定义] ' + styleText : '')) + (snap ? SNAP_NUDGE : ctx.sandbox ? (USER_NUDGE + (ctx.shell ? '' : REGULAR_NUDGE)) : (hostNudge() + HOST_TOOLS_NUDGE)) + (termOn ? TERMINAL_NUDGE : '') + (wsToolsOn ? WORKSPACE_NUDGE : '') + DELIVER_NUDGE + (research ? RESEARCH_NUDGE : '');
   // 当前激活的 Claude 账号 token（+ 沙箱 configDir）现取现注——切账号即时生效。
   const engineEnv = claudeEngineEnv(ctx);
   // effort：ultracode 不是 SDK 的 effort 取值（TS 类型只列五档）——翻译成 effort:'xhigh' +
@@ -1190,8 +1203,10 @@ export async function runClaudeChat(req, res, { message, sessionId, model, effor
       announceStart();
       if (nprefs && gen.sessionId) { try { recordChatPrefs(ctx, gen.sessionId, nprefs); } catch {} }
       // 选择器换了模型：同一进程里 setModel（effort / fast 这类启动参数本轮沿用，下一次新开进程才生效）。
+      // 第三方激活时走账号列表校验（合法用之、非法回落默认），不过 to1M。
       if (nmodel && nmodel !== runModel) {
-        try { await q.setModel(to1M(nmodel)); runModel = nmodel; } catch (e) { console.log('[claude] handoff setModel failed:', e && e.message); }
+        const target = resolveTpModel(activeEngineInfo(), nmodel);
+        try { await q.setModel(target); runModel = nmodel; } catch (e) { console.log('[claude] handoff setModel failed:', e && e.message); }
       }
       turnInput.push(next.prompt, next.imageBlocks, uuid);
       console.log(`[claude] handoff — new message fed into the held run (${liveBgTasks().length} background task(s) keep running)`);

@@ -61,7 +61,13 @@
   const nameOf = (list, id) => (list.find((x) => x.id === id) || {}).name || id;
   const modelList = $derived(caps.data?.claude?.models || []);
   const curModel = $derived(settings.model || claudeDefaultModel(caps.data));
-  const modelName = $derived(nameOf(modelList, curModel));
+  // 第三方端点激活：主按钮显示当前第三方模型 id——显式选过且在账号列表里 → 之，否则列表
+  // 第一个（与后端回落规则一致）。官方 nameOf 映射对第三方 id 无名可寻，直接展示原始 id。
+  const tpActive = $derived(status.activeEngine?.custom || false);
+  const tpCur = $derived(tpActive
+    ? ((status.activeEngine?.models || []).includes(settings.model) ? settings.model : ((status.activeEngine?.models || [])[0] || ''))
+    : '');
+  const modelName = $derived(tpActive ? tpCur : nameOf(modelList, curModel));
   // 会话实际模型 ≠ 所选：安全栅门自动回退（system/model_refusal_fallback，scope session）后内核在
   // status.models[sid] 记下「本会话已切到 X」，settings.model 也随 session{swapped} 换成 X——两者
   // 一致时芯片就是 X，什么也不标；人再手动切回原模型才会不一致 → 点线下划 + title 说明

@@ -10,6 +10,7 @@
 // （ctx.dataDir）隔离，多用户互不可见；条目上限防无限膨胀。
 import path from 'node:path';
 import { readFileSync, writeFileSync, mkdirSync } from 'node:fs';
+import { activeIsCustom } from './claude-account.mjs';
 
 const CAP = 400;           // 只留最近 N 个会话的偏好
 const cache = new Map();   // file -> data（bridge 单进程，读写都走这份内存，磁盘只是持久化）
@@ -71,6 +72,9 @@ export function lastChatPrefs(ctx) {
 // session{swapped} 事件切）。只改本会话的条目，不动 last——切换是会话级的，新对话的默认不受影响。
 export function swapChatPrefsModel(ctx, sessionId, model, from) {
   if (!ctx?.dataDir || !sessionId || !model) return;
+  // 第三方端点激活时跳过：官方回退模型 id 对第三方上游没有意义（端点不认 claude-*），
+  // 记进 sidecar 反而会在恢复时被校验打到账号默认——不如原地不动。
+  if (activeIsCustom()) return;
   const file = fileFor(ctx);
   const data = load(file);
   const cur = data.sessions[sessionId] || norm(null);

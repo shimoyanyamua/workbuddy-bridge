@@ -234,17 +234,35 @@ export function registerAdminRoutes(router, { authOk, adminCredential = null, ad
     J(res, { accounts: claudeAccounts.listAccounts() });
   });
   router.on('POST', '/api/admin/claude-account/active', userAction((b) => claudeAccounts.setActive(String(b.id || ''))));
-  router.on('POST', '/api/admin/claude-account/add', userAction((b) => claudeAccounts.addAccount({ label: b.label, type: b.type, token: b.token, baseUrl: b.baseUrl, apiKey: b.apiKey, model: b.model })));
-  router.on('POST', '/api/admin/claude-account/update', userAction((b) => claudeAccounts.updateAccount(String(b.id || ''), { label: b.label, type: b.type, token: b.token, baseUrl: b.baseUrl, apiKey: b.apiKey, model: b.model })));
+  router.on('POST', '/api/admin/claude-account/add', userAction((b) => claudeAccounts.addAccount({ label: b.label, type: b.type, token: b.token, baseUrl: b.baseUrl, apiKey: b.apiKey, model: b.model, models: b.models })));
+  router.on('POST', '/api/admin/claude-account/update', userAction((b) => claudeAccounts.updateAccount(String(b.id || ''), { label: b.label, type: b.type, token: b.token, baseUrl: b.baseUrl, apiKey: b.apiKey, model: b.model, models: b.models })));
   router.on('POST', '/api/admin/claude-account/delete', userAction((b) => claudeAccounts.deleteAccount(String(b.id || ''))));
+  // 拉取第三方端点的模型列表：GET {base}/v1/models。端点不支持时 ok:false，前端回退手动填写。
+  router.on('POST', '/api/admin/claude-account/models', async (req, res) => {
+    if (!gate(req, res)) return;
+    const chunks = [];
+    for await (const c of req) chunks.push(c);
+    let b = {};
+    try { b = JSON.parse(Buffer.concat(chunks).toString('utf8') || '{}'); } catch {}
+    J(res, await claudeAccounts.fetchCustomModels({ baseUrl: b.baseUrl, apiKey: b.apiKey }));
+  });
   // 第三方端点探活：发一次最小 messages 请求验证 baseUrl + apiKey（+ model）。纯探测，不落盘。
+  // model 留空时先试着拉一次模型列表、用列表首模型探活——很多端点（如 MiMo）不认 claude-* 兜底名，
+  // 不这样做「测试连接」会误报 Unsupported model；列表拉不到再退回 claude 兜底名。
   router.on('POST', '/api/admin/claude-account/probe', async (req, res) => {
     if (!gate(req, res)) return;
     const chunks = [];
     for await (const c of req) chunks.push(c);
     let b = {};
     try { b = JSON.parse(Buffer.concat(chunks).toString('utf8') || '{}'); } catch {}
-    J(res, await claudeAccounts.probeCustom({ baseUrl: b.baseUrl, apiKey: b.apiKey, model: b.model }));
+    let model = String(b.model || '').trim();
+    let models = [];
+    if (!model) {
+      const lr = await claudeAccounts.fetchCustomModels({ baseUrl: b.baseUrl, apiKey: b.apiKey });
+      if (lr.ok && lr.models.length) { model = lr.models[0]; models = lr.models; }
+    }
+    const r = await claudeAccounts.probeCustom({ baseUrl: b.baseUrl, apiKey: b.apiKey, model });
+    J(res, models.length ? { ...r, models } : r);
   });
 
   // 聚合总览：所有活跃 gen + routines 运行中 + 用户数。一个端点喂满总览面板。
@@ -283,7 +301,7 @@ export function registerAdminRoutes(router, { authOk, adminCredential = null, ad
       res.writeHead(403, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ error: '该用户没有 Claude 的权限，或它未启用' })); return;
     }
     const { runClaudeChat } = await import('../agents/claude.mjs');
-    return runClaudeChat(req, res, { message, sessionId, model: CLAUDE_MODELS.has(b.model) ? b.model : undefined, effort: CLAUDE_EFFORTS.has(b.effort) ? b.effort : undefined, attachments: [], ctx });
+    return runClaudeChat(req, res, { message, sessionId, model: claudeAccounts.resolveChatModel(b.model) || undefined, effort: CLAUDE_EFFORTS.has(b.effort) ? b.effort : undefined, attachments: [], ctx });
   });
 
   // 代任意用户回答 AskUserQuestion（loopback 信任，直接 settle）

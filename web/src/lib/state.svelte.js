@@ -119,8 +119,8 @@ export function singleMode() { return rootScreen() !== 'home'; }
 // session{swapped} / model_notice scope=session）后，Composer 的模型芯片据此标「本会话已切换到 X」。
 // suggestions：按会话记的输入建议 {text, at, dismissed?}——每轮定局后 CLI 预测的下一句（总线 suggestion /
 // hello 帧），输入框空着时当占位文字显示，Tab 填入（见 chat.svelte.js noteSuggestion）。
-// activeEngine：第三方端点（custom Claude 账号）激活时 {custom:true, model}——/api/status 回；
-// 模型选择器据此停用（模型固定为账号配置的 model），定时任务的模型选择同理。
+// activeEngine：第三方端点（custom Claude 账号）激活时 {custom:true, model, models:[]}——
+// /api/status 回；模型选择器/定时任务据此渲染账号模型列表（models），像原生一样切换。
 export const status = $state({ limits: null, context: null, contexts: {}, usages: {}, efforts: {}, models: {}, suggestions: {}, commands: null, plan: null, updatedAt: 0, fast: null, activeEngine: null });
 
 // 任务详情（Agent 子转录 / Workflow 阶段面板）住在右侧工作台的「任务」视图

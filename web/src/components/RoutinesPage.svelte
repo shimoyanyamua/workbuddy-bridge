@@ -39,7 +39,12 @@
   const effortList = $derived(caps.data?.claude?.efforts || []);
   const defModel = $derived(claudeDefaultModel(caps.data));
   const defEffort = $derived(claudeEffortFallback(caps.data, fModel || defModel));
-  const engineLabel = $derived(`Claude · ${nameOf(modelList, fModel || defModel)} · ${nameOf(effortList, fEffort || defEffort)}`);
+  // 第三方端点激活：任务模型从账号模型列表里选（存的就是第三方 id，runner 按列表校验回落）。
+  const tpModels = $derived(status.activeEngine?.custom ? (status.activeEngine.models || []) : []);
+  const tpCur = $derived(tpModels.includes(fModel) ? fModel : (tpModels[0] || ''));
+  const engineLabel = $derived(status.activeEngine?.custom
+    ? `Claude · ${tpCur || t('账号默认')} · ${nameOf(effortList, fEffort || defEffort)}`
+    : `Claude · ${nameOf(modelList, fModel || defModel)} · ${nameOf(effortList, fEffort || defEffort)}`);
 
   const pad = (n) => String(n).padStart(2, '0');
   // 钟点：中文保持 09:00；英文 12 小时制 9:00 AM（按 UTC 取值只为拿到 h:m 本身，时区是服务器 GMT+8）
@@ -190,7 +195,14 @@
               <button class="eng-bd" aria-label={t('关闭')} onclick={() => (enginePop = false)}></button>
               <div class="eng-pop">
                 {#if status.activeEngine?.custom}
-                  <div class="eng-sec">{status.activeEngine.model ? t('当前账号为第三方端点，模型固定为 {model}', { model: status.activeEngine.model }) : t('当前账号为第三方端点，模型以账号配置为准')}</div>
+                  {#if tpModels.length}
+                    <div class="eng-sec">{t('模型')}</div>
+                    <div class="pills">
+                      {#each tpModels as id (id)}<button class="pill {tpCur === id ? 'on' : ''}" onclick={() => (fModel = id)}>{id}</button>{/each}
+                    </div>
+                  {:else}
+                    <div class="eng-sec">{t('当前账号为第三方端点，模型以账号配置为准')}</div>
+                  {/if}
                 {:else}
                   <div class="eng-sec">{t('模型')}</div>
                   <div class="pills">

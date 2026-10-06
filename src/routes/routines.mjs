@@ -7,11 +7,17 @@ import * as routines from '../routines.mjs';
 import { runRoutine, routineRunning } from '../runtime/routines-runner.mjs';
 import { requireCtx } from '../runtime/identity.mjs';
 import { CLAUDE_MODELS, CLAUDE_EFFORTS, ULTRACODE } from '../config/capabilities.mjs';
+import { activeIsCustom, activeCustomModelSet } from '../runtime/claude-account.mjs';
 
 // Validate the model / effort against the Claude whitelists; unknown values fall
 // through to undefined so the routine stores null = "server default".
+// 模型分流：custom 激活时合法集合 = 账号模型列表 ∪ 官方白名单（∪ 是为兼容旧 routine 里
+// 已存的原生 id——切到第三方后旧任务照常跑，runner 侧会回落账号默认模型）。
 function engineFields(body) {
-  return { agent: 'claude', model: CLAUDE_MODELS.has(body.model) ? body.model : undefined, effort: CLAUDE_EFFORTS.has(body.effort) ? body.effort : undefined, search: false };
+  const modelOk = activeIsCustom()
+    ? (activeCustomModelSet().has(body.model) || CLAUDE_MODELS.has(body.model))
+    : CLAUDE_MODELS.has(body.model);
+  return { agent: 'claude', model: modelOk ? body.model : undefined, effort: CLAUDE_EFFORTS.has(body.effort) ? body.effort : undefined, search: false };
 }
 
 // Ultracode（xhigh + 常驻动态工作流）不给无人值守的定时路由：Workflow 会派一群子 agent，成本没有上限、
