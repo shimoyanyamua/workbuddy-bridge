@@ -12,7 +12,8 @@
 //   harness/            — dimensio, spawned per user and reverse-proxied by routes/harness.mjs
 
 import http from 'node:http';
-import { PORT, TOKEN, TOKEN_HASH, VAULT, MODEL, OAUTH, NO_AUTH, ROOT, EDITION, FEATURES } from './config/index.mjs';
+import { PORT, TOKEN, TOKEN_HASH, VAULT, MODEL, OAUTH, NO_AUTH, ROOT, EDITION, FEATURES, TRUSTED_ORIGINS } from './config/index.mjs';
+import { originTrusted } from './config/trusted-origins.mjs';
 import { createAuth } from './auth.mjs';
 import { isAdminSession } from './users.mjs';
 import { makeIdentify } from './runtime/identity.mjs';
@@ -84,18 +85,9 @@ const router = createRouter();
 // SameSite + Bearer/token；NO_AUTH 调试实例有更严的本地守卫，不在此重复。
 // 反向代理 / 云网关场景：转发时 Host 头会被改写成内部主机名（公网域名只留在
 // 浏览器的 Origin 头里，部分网关连 x-forwarded-host 也不还原），「Origin === Host」
-// 判定因此失效，所有写请求被误拒。BRIDGE_TRUSTED_ORIGINS 提供部署者显式信任的
-// origin 列表（逗号分隔，可带协议或裸 host），命中即放行——等价于框架的 CSRF
-// trusted-origins 配置，不改它时行为与上游完全一致。
-const TRUSTED_ORIGINS = new Set(
-  String(process.env.BRIDGE_TRUSTED_ORIGINS || '')
-    .split(',')
-    .map((s) => s.trim())
-    .filter(Boolean)
-    .map((s) => { try { return new URL(s.includes('://') ? s : 'https://' + s).host.toLowerCase(); } catch { return ''; } })
-    .filter(Boolean)
-);
-
+// 判定因此失效，所有写请求被误拒。部署者用 BRIDGE_TRUSTED_ORIGINS（env，逗号分隔）
+// 或 config.json 的 trustedOrigins（数组）显式信任的 origin 列表，命中即放行——
+// 等价于框架的 CSRF trusted-origins 配置，条目支持 `*.` 通配，不改它时行为与上游完全一致。
 router.use((req, res, url) => {
   if (url.pathname.startsWith('/api/')) {
     // 防 admin 令牌经 ?token= 资源链接外泄到第三方 Referer / 隧道访问日志。
@@ -105,7 +97,7 @@ router.use((req, res, url) => {
       if (origin) {
         let oh = null; try { oh = new URL(origin).host.toLowerCase(); } catch {}
         const host = String(req.headers.host || '').toLowerCase();
-        if (!(oh && (oh === host || TRUSTED_ORIGINS.has(oh)))) {
+        if (!(oh && (oh === host || originTrusted(oh, TRUSTED_ORIGINS)))) {
           res.writeHead(403, { 'Content-Type': 'text/plain' }); res.end('cross-origin forbidden'); return false;
         }
       }

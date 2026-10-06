@@ -8,6 +8,7 @@ import { randomBytes } from 'node:crypto';
 import path from 'node:path';
 import { DATA_ROOT, PROGRAM_ROOT } from '../runtime/paths.mjs';
 import { CLAUDE_MODEL_DEFAULT } from './capabilities.mjs';
+import { parseTrustedOrigins } from './trusted-origins.mjs';
 
 // Mutable data lives under the data root (BRIDGE_DATA_ROOT; the deploy scripts point it
 // outside the program tree so versions can be swapped). ROOT is the historical public
@@ -104,6 +105,11 @@ export const userRoot = (name) => path.join(NATIVE_ROOT, name);
 // 稳定公网 origin（自己域名的固定隧道），用于生成可分享的完整链接（/s/<token>）。
 // 空 = 用的是临时地址，/api/share 只回相对路径 /s/<token>，由前端按当前地址拼。
 export const PUBLIC_ORIGIN = (process.env.BRIDGE_PUBLIC_ORIGIN || config.publicOrigin || '').replace(/\/+$/, '');
+
+// CSRF 信任 origin（反代 / 云网关改写 Host 头的部署场景）：BRIDGE_TRUSTED_ORIGINS
+// （env，逗号分隔）∪ config.json trustedOrigins（数组），条目可带协议或裸 host，
+// 支持 `*.` 前缀通配。语义见 ./trusted-origins.mjs。
+export const TRUSTED_ORIGINS = Object.freeze(parseTrustedOrigins(process.env.BRIDGE_TRUSTED_ORIGINS, config.trustedOrigins));
 
 // Local debugging only: BRIDGE_NO_AUTH=1 binds the instance to 127.0.0.1 with no
 // token. The deployed server never sets this, so it stays token-protected.

@@ -30,6 +30,8 @@ sudo bash scripts/server/install.sh --agents claude,dimensio
 
 `install.sh --help` 查看全部选项。服务只听本机 127.0.0.1，对外访问需要你自己配隧道或反向代理（加 `--tunnel-token` 可以顺带起一条 Cloudflare 命名隧道）。更新用 `sudo bash scripts/server/update.sh`。
 
+> **反代 / 隧道改写 Host？** 有的网关转发时会把 Host 头换成内部主机名（浏览器地址栏的公网域名只留在 Origin 头里），此时所有「写」请求（保存 / 测试连接 / 发消息）会被 CSRF 防护拒成 403。在 config.json 里加 `"trustedOrigins": ["你的公网域名", "*.tunnel.example.com"]`（或环境变量 `BRIDGE_TRUSTED_ORIGINS`，逗号分隔；支持 `*.` 通配）即可放行。
+
 装完浏览器打开服务地址，用安装时打印的管理员令牌登录。接着去「设置 → 连接 → 服务端控制台 → Claude 账号」把 Claude 订阅令牌填进去（见下节）。
 
 **我该走哪条安装路径？** 这个项目自带两套安装器，不能混用：
