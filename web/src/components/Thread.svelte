@@ -435,6 +435,10 @@
                 <!-- 官方 /code 页同款：菊花右侧一颗蓝色任务芯片（「1 running task」），点开任务面板 -->
                 <button class="bgchip" title={t('查看后台任务详情')} onclick={() => openDock('tasks')}>{bgHoldText(m.bgHold)}</button>
               {/if}
+            {:else if m.tokens > 0}
+              <!-- 完成后保留一行最终用量（第三方端点的用量要等回复完成才上报，思考中显示 0 是实时真相）；
+                   只在确实收到过用量时显示——历史重开的气泡没有这个数据，显示 0 反而误导。 -->
+              <span class="meta" style="opacity:.75">{fmtTokens(m.tokens)} tokens</span>
             {/if}
           </div>
         {/if}
