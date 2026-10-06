@@ -45,6 +45,10 @@ memory/.workspace-isolation-migrated
 *.log
 *.log.[0-9]
 
+# native crash dumps（node 段错误时内核写在工作区的 core.<pid>）
+core
+core.*
+
 # release build output
 /dist/
 
